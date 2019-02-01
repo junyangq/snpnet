@@ -1,0 +1,20 @@
+Package: GWASLasso
+Type: Package
+Title: What the Package Does (Title Case)
+Version: 0.1.0
+Author: Junyang Qian
+Maintainer: The package maintainer <yourself@somewhere.net>
+Description: Fitting the entire lasso solution path on large genotype-phenotype data
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+Imports: glmnet,
+    BEDMatrix,
+    BGData,
+    pryr,
+    ROCR
+Depends: data.table
+RoxygenNote: 6.0.1
+Suggests: knitr,
+    rmarkdown
+VignetteBuilder: knitr

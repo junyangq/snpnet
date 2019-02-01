@@ -1,0 +1,151 @@
+---
+title: "An Introduction to GWASLasso"
+author: "Junyang Qian and Trevor Hastie"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+GWASLasso is a package that is used to fit the lasso on big genomics data. We assume the data are stored in bed/bim/fam format by the [PLINK library](https://www.cog-genomics.org/plink2/formats#bed), and the training part is named by train.bed/bim/fam and if provided the validation part by val.bed/bim/fam.
+
+A config list should be specified to include some meta configurations such as
+
+- `missing.rate`: variants are excluded if the missing rate exceeds this level
+- `MAF.thresh`: variants are excluded if the minor allele frequency (MAF) exceeds this level
+- `nCores`: the number of cores used for computation. You may use the maximum number of cores available on the computer
+- `bufferSize`: the maximum number of SNP columns we want to load at a time subject to memory bound (used in KKT check). For example, a dataset of 200K $\times$ 10K takes around 15 Gbs of memory
+- `meta.dir`: the relative path to the subdirectory used to store the computed summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`). Needed when `save = T` specified in the main function. Default is `"meta.dir/`
+- `results.dir`: the relative path to the subdirectory used to store the intermediate results so that we may look into or recover from later. Needed when `save = T` specified in the main function. Default is `"results.dir/`
+- `nlams.init`: the number of lambdas considered in the first iteration. 10 is a reasonable number to start with
+- `nlams.delta`: the length of extended lambdas down the sequence when there are few left in the current sequence (remember we don't fit all lambdas every iteration, only extend when most of the current ones have been completed and validated). 2-5 should be reasonable numbers
+
+```{r}
+library(BEDMatrix)
+library(GWASLasso)
+
+configs <- list(
+  missing.rate = 0.1,
+  MAF.thresh = 0.001,
+  nCores = 2,
+  bufferSize = 100,
+  meta.dir = "meta/",
+  nlams.init = 10,
+  nlams.delta = 5
+)
+```
+
+The most important parameters in the core function `GWASLasso` include:
+
+- genotype.dir: the directory that contains genotype files. Assume at least the existence of train.bed/bim/fam, and val.bed/bim/fam if validation option is on. We assume that individuals that appear in train/val.bed/bim/fam should all appear also in the phenotype table. The individual ID in genotype files take the format `ID_ID` while the ID in the phenotype file takes the format `ID`.
+- phenotype.file: the path of the file that contains the phenotype values and can be read as a table.
+- phenotype: the name of the phenotype. Must be the same as the corresponding column name in the phenotype file.
+- covariates: a character vector containing the names of the covariates included in the lasso fitting, whose coefficients will not be penalized. The names must exist in the column names of the phenotype file.
+- results.dir: the path to the directory where meta and intermediate results are saved.
+- niter: the number of maximum iteration in the algorithm.
+- family: the type of the phenotype: "gaussian" or "binomial".
+- standardize.variant: a logical value indicating whether the variants are standardized in the lasso fitting. For SNP matrix, we may not want to standardize since the variants are already on the same scale.
+- nlambda: the number of lambda values on the solution path.
+- validation: a logical value indicating if performance is evaluated on the validation set. If so, `val.bed/bim/fam` should be available in `genotype.dir`.
+- save: a logical value whether to save intermediate results (e.g. in case of job failure and restart).
+
+Others include: 
+
+- num.snps.batch: the number of variants added to the strong set in each iteration. Default is 1000.
+- use.glmnetPlus: a logical value whether to use glmnet with warm start, if the glmnetPlus package is available. Currently only "gaussian" family is supported.
+- early.stopping: a logical value indicating whether early stopping based on validation metric is desired. Default is `TRUE`.
+- stopping.lag: a parameter for the stopping criterion such that the procedure stops after this number of consecutive decreases in the validation performance. Default is 2.
+- KKT.verbose: a logical value indicating if details on KKT check should be printed.
+- prevIter: if non-zero, it indicates the last successful iteration in the procedure so that we can restart from there. niter should be no less than prevIter.
+                 
+If we want to recover results and continue the procedure from a previous job, we should have `save = TRUE` and specify in `prevIter` the index of the last successful iteration.
+
+
+```{r}
+genotype.dir <- paste0(system.file("extdata", package = "GWASLasso"), "/")
+phenotype.file <- system.file("extdata", "sample_phe.phe", package = "GWASLasso")
+
+# use glmnetPlus
+out <- GWASLasso(
+  genotype.dir = genotype.dir,
+  phenotype.file = phenotype.file,
+  phenotype = "QPHE",
+  family = "gaussian",
+  standardize.variant = FALSE,
+  niter = 2,
+  validation = FALSE,
+  configs = configs,
+  use.glmnetPlus = TRUE,
+  verbose = FALSE,
+  save = FALSE,
+  glmnet.thresh = 1e-12
+)
+```
+
+We can then take a look at the coefficients and the metric.
+```{r}
+str(out$a0)
+str(out$beta)
+```
+
+```{r}
+out$metric.train
+```
+
+The `NAs` correspond to unfinished $\lambda$ values. We don't have to compute the entire solution path if a validation set is provided and an optimal solution has been found.
+
+We may want to compare with `glmnet` solution.
+
+```{r}
+library(data.table)
+library(glmnet)
+
+chr <- BEDMatrix(paste0(genotype.dir, "train.bed"))
+data.X <- chr[, ]
+p <- ncol(data.X)
+pnas <- numeric(p)
+for (j in 1:p) {
+  pnas[j] <- mean(is.na(data.X[, j]))
+  data.X[is.na(data.X[, j]), j] <- mean(data.X[, j], na.rm = T)
+}
+sum(pnas > configs$missing.rate)
+phe <- fread(phenotype.file)
+data.X <- as.matrix(cbind(age = phe$age, sex = phe$sex, phe[, paste("PC", 1:10, sep = "")], data.X))
+data.y <- phe$QPHE
+pfactor <- rep(1, p + 12)
+pfactor[1:12] <- 0
+fit <- glmnet(data.X, data.y, penalty.factor = pfactor, standardize = F, thresh = 1e-12)
+```
+
+```{r}
+# check difference of coefficients matched by the names
+checkDiff <- function(x, y) {
+  unames <- union(names(x), names(y))
+  xf <- yf <- rep(0, length(unames))
+  names(xf) <- names(yf) <- unames
+  xf[match(names(x), unames)] <- x
+  yf[match(names(y), unames)] <- y
+  list(max = max(abs(xf-yf)), mean = mean(abs(xf-yf)))
+}
+```
+
+We show the difference of the computed $\lambda$ sequence and estimated coefficients. Due to the convergence threshold and slightly different updating rule, there is small discrepancy between the two solutions. The gap will shrink and eventually goes to 0 if we keep on tightening the threshold. 
+
+```{r}
+max(abs(fit$lambda - out$full.lambda))
+```
+
+```{r}
+checkDiff(out$beta[[6]], fit$beta[, 6])
+```
+
+
