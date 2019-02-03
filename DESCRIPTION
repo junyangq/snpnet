@@ -12,7 +12,10 @@ Imports: glmnet,
     BEDMatrix,
     BGData,
     pryr,
-    ROCR
+    ROCR,
+    Rcpp,
+    BEDMatrix
+LinkingTo: Rcpp, BH
 Depends: data.table
 RoxygenNote: 6.0.1
 Suggests: knitr,
