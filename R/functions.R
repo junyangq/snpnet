@@ -5,7 +5,7 @@ compute.summary.stats <- function(chr, subset, FUN, file.path, save = F, bufferS
     sum.stats <- readRDS(file.path)
   } else {
     if (verbose) cat(paste0("Start computing stats for ", file.path, " ...\n"))
-    sum.stats <- BGData::chunkedApply(chr, 2, FUN, i = subset, bufferSize = bufferSize, verbose = verbose, nCores = nCores)
+    sum.stats <- BGData::chunkedApply(chr, 2, FUN, i = subset, chunkSize = bufferSize, verbose = verbose, nCores = nCores)
     names(sum.stats) <- colnames(chr)
     if (verbose) cat(paste0("End computing SNP for ", file.path, " ...\n"))
     if (save) {
