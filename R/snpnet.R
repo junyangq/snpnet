@@ -36,8 +36,10 @@
 #'                 we can restart from there. niter should be no less than prevIter.
 #'
 #' @return a list containing the solution path, the metric evaluated on training/validation set.
+#'
+#' @useDynLib snpnet, .registration=TRUE
 #' @export
-GWASLasso <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, niter = 10,
+snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, niter = 10,
                       family = NULL, standardize.variant = FALSE, nlambda = 100,
                       validation = FALSE,
                       covariates = c("age", "sex", paste0("PC", 1:10)), num.snps.batch = 1000, glmnet.thresh = 1E-7, configs, verbose = TRUE,
@@ -132,7 +134,7 @@ GWASLasso <- function(genotype.dir, phenotype.file, phenotype, results.dir = NUL
     rownames(residual.full) <- ids.chr.train[rowIdx.subset.train]
 
     if (verbose) cat(paste0("Start computing KKT product for initialization ...\n"))
-    prod.full <- computeProduct(residual.full, chr.train, rowIdx.subset.train, stats, configs, verbose = verbose)
+    prod.full <- computeProduct(residual.full, chr.train, rowIdx.subset.train, stats, configs, verbose = verbose, path = paste0(genotype.dir, "train.bed"))
     score <- abs(prod.full[, 1])
     if (verbose) cat(paste0("End computing KKT product for initialization. \n"))
 
@@ -247,7 +249,7 @@ GWASLasso <- function(genotype.dir, phenotype.file, phenotype, results.dir = NUL
     start.KKT.time <- Sys.time()
 
     check.obj <- KKT.check(residual.full, chr.train, rowIdx.subset.train, current.lams[start.lams:num.lams], ifelse(family == "gaussian" && use.glmnetPlus, 1, lambda.idx),
-                           stats, glmfit, configs, verbose, KKT.verbose)
+                           stats, glmfit, configs, verbose, KKT.verbose, path = paste0(genotype.dir, "train.bed"))
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
     if (family == "gaussian" && use.glmnetPlus) {

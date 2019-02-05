@@ -56,7 +56,7 @@ computeStats <- function(chr, subset, stat, path, save, configs, verbose = F) {
 }
 
 
-computeProduct <- function(residual, chr, subset, stats, configs, verbose = T) {
+computeProduct <- function(residual, chr, subset, stats, configs, path = path, verbose = T) {
   n.chr <- nrow(chr)
   n.subset <- length(subset)
   residual.full <- matrix(0, n.chr, ncol(residual))
@@ -65,7 +65,7 @@ computeProduct <- function(residual, chr, subset, stats, configs, verbose = T) {
   # print("mem used in computeProduct:")
   # print(pryr::mem_used())
 
-  prod.full <- chunkedApply_missing(chr, 2, residual.full, missing = stats[["means"]], nCores = configs[["nCores"]], bufferSize = configs[["bufferSize"]], verbose = verbose)
+  prod.full <- chunkedApply_missing(chr, 2, residual.full, missing = stats[["means"]], nCores = configs[["nCores"]], bufferSize = configs[["bufferSize"]], verbose = verbose, path = path)
   if (length(dim(prod.full)) < 2) {
     prod.full <- matrix(prod.full, ncol = 1)
   }
@@ -79,8 +79,8 @@ computeProduct <- function(residual, chr, subset, stats, configs, verbose = T) {
 }
 
 
-KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F) {
-  prod.full <- computeProduct(residual, chr, subset, stats, configs, verbose)
+KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path) {
+  prod.full <- computeProduct(residual, chr, subset, stats, configs, verbose, path = path)
 
   gene.names <- rownames(prod.full)
   strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
@@ -144,7 +144,7 @@ computeMetric <- function(pred, response, family) {
 }
 
 
-chunkedApply_missing <- function(X, MARGIN, residuals, missing = NULL, i = seq_len(nrow(X)), j = seq_len(ncol(X)), bufferSize = 5000L, nTasks = nCores, nCores = getOption("mc.cores", 2L), verbose = FALSE, ...) {
+chunkedApply_missing <- function(X, MARGIN, residuals, missing = NULL, i = seq_len(nrow(X)), j = seq_len(ncol(X)), bufferSize = 5000L, nTasks = nCores, nCores = getOption("mc.cores", 2L), verbose = FALSE, path = path, ...) {
   if (!length(dim(X))) {
     stop("dim(X) must have a positive length")
   }
@@ -189,7 +189,7 @@ chunkedApply_missing <- function(X, MARGIN, residuals, missing = NULL, i = seq_l
       }
       # cat("Here: 1\n")
       # cat(paste0("Length: ", length(seq(bufferRanges[1L, whichBuffer], bufferRanges[2L, whichBuffer])), "\n"))
-      BEDMatrix::multiply_residuals(X, i, j[seq(bufferRanges[1L, whichBuffer], bufferRanges[2L, whichBuffer])], missing, residuals)
+      multiply_residuals(X, path, i, j[seq(bufferRanges[1L, whichBuffer], bufferRanges[2L, whichBuffer])], missing, residuals)
       # apply2(X = subset, MARGIN = MARGIN, FUN = FUN, ...)
     } else {
       bufferIndex <- seq(bufferRanges[1L, whichBuffer], bufferRanges[2L, whichBuffer])
@@ -202,7 +202,7 @@ chunkedApply_missing <- function(X, MARGIN, residuals, missing = NULL, i = seq_l
         } else {
           # subset <- X[i[taskIndex], j, drop = FALSE]
         }
-        BEDMatrix::multiply_residuals(X, i, j[taskIndex], missing, residuals)
+        multiply_residuals(X, path, i, j[taskIndex], missing, residuals)
         # apply2(X = subset, MARGIN = MARGIN, FUN = FUN, ...)
       }, ..., mc.preschedule = FALSE, mc.cores = nCores)
       simplifyList_Col(res)
@@ -219,4 +219,20 @@ simplifyList_Col <- function(x) {
     x <- unlist(x)
   }
   return(x)
+}
+
+multiply_residuals <- function(x, ...) {
+  UseMethod("multiply_residuals", x)
+}
+
+multiply_residuals.BEDMatrix <- function(x, path, i, j, missing, residuals) {
+  out <- .Call("BEDMatrix__multiply_residuals", path, x@dims[1], x@dims[2], i, j, missing, residuals, PACKAGE = "snpnet")
+  # Preserve dimnames
+  names <- x@dnames
+  dimnames(out) <- list(
+    names[[2L]][j],
+    colnames(residuals)
+  )
+  # return(out)
+  out
 }

@@ -1,5 +1,5 @@
 ---
-title: "An Introduction to GWASLasso"
+title: "An Introduction to Snpnet"
 author: "Junyang Qian and Trevor Hastie"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-GWASLasso is a package that is used to fit the lasso on big genomics data. We assume the data are stored in bed/bim/fam format by the [PLINK library](https://www.cog-genomics.org/plink2/formats#bed), and the training part is named by train.bed/bim/fam and if provided the validation part by val.bed/bim/fam.
+Snpnet is a package that is used to fit the lasso on big genomics data. We assume the data are stored in bed/bim/fam format by the [PLINK library](https://www.cog-genomics.org/plink2/formats#bed), and the training part is named by train.bed/bim/fam and if provided the validation part by val.bed/bim/fam.
 
 A config list should be specified to include some meta configurations such as
 
@@ -31,7 +31,7 @@ A config list should be specified to include some meta configurations such as
 
 ```{r}
 library(BEDMatrix)
-library(GWASLasso)
+library(snpnet)
 
 configs <- list(
   missing.rate = 0.1,
@@ -44,7 +44,7 @@ configs <- list(
 )
 ```
 
-The most important parameters in the core function `GWASLasso` include:
+The most important parameters in the core function `snpnet` include:
 
 - genotype.dir: the directory that contains genotype files. Assume at least the existence of train.bed/bim/fam, and val.bed/bim/fam if validation option is on. We assume that individuals that appear in train/val.bed/bim/fam should all appear also in the phenotype table. The individual ID in genotype files take the format `ID_ID` while the ID in the phenotype file takes the format `ID`.
 - phenotype.file: the path of the file that contains the phenotype values and can be read as a table.
@@ -71,11 +71,11 @@ If we want to recover results and continue the procedure from a previous job, we
 
 
 ```{r}
-genotype.dir <- paste0(system.file("extdata", package = "GWASLasso"), "/")
-phenotype.file <- system.file("extdata", "sample_phe.phe", package = "GWASLasso")
+genotype.dir <- paste0(system.file("extdata", package = "snpnet"), "/")
+phenotype.file <- system.file("extdata", "sample_phe.phe", package = "snpnet")
 
 # use glmnetPlus
-out <- GWASLasso(
+out <- snpnet(
   genotype.dir = genotype.dir,
   phenotype.file = phenotype.file,
   phenotype = "QPHE",
