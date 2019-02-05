@@ -1,6 +1,6 @@
 Package: snpnet
 Type: Package
-Title: snpnet: Efficient Lasso Solver for Large Snp Data
+Title: snpnet: Efficient Lasso Solver for Large SNP Data
 Version: 0.1.0
 Author: Junyang Qian and Trevor Hastie
 Maintainer: Junyang Qian <junyangq@stanford.edu>
