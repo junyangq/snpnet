@@ -113,7 +113,6 @@ Rcpp::NumericMatrix BEDMatrixPlus::multiply_residuals(Rcpp::IntegerVector i, Rcp
 
 const unsigned short int BEDMatrixPlus::length_header = 3;
 
-// [[Rcpp::export]]
 RcppExport SEXP BEDMatrix__multiply_residuals(SEXP xp_, SEXP n_, SEXP p_, SEXP i_, SEXP j_, SEXP iv_, SEXP r_) {
     std::string path = Rcpp::as<std::string>(xp_);
     std::size_t n = Rcpp::as<std::size_t>(n_);
