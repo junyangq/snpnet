@@ -1,0 +1,61 @@
+* using log directory ‘/Users/jyqian/Dropbox/UKBB/software/packages/GWASLasso/..Rcheck’
+* using R version 3.4.3 (2017-11-30)
+* using platform: x86_64-apple-darwin15.6.0 (64-bit)
+* using session charset: UTF-8
+* checking for file ‘./DESCRIPTION’ ... OK
+* checking extension type ... Package
+* this is package ‘GWASLasso’ version ‘0.1.0’
+* package encoding: UTF-8
+* checking package namespace information ... OK
+* checking package dependencies ... OK
+* checking if this is a source package ... OK
+* checking if there is a namespace ... OK
+* checking for executable files ... WARNING
+Found the following executable files:
+  .git/objects/00/4e7261e1210c7aa7ff32f8f230a5103cd7dd3c
+  .git/objects/07/cf37abf6baa75a871b1cc1e8ca9c329d9e4b26
+  .git/objects/27/0314b87d171300f76501b32e8a0354926d9c84
+  .git/objects/2a/42085b7d59ba336efed84e4cfc5d6c6cd4c7bb
+  .git/objects/47/fe09acea2549003d789b2a1adeb766540add5b
+  .git/objects/49/12df7b24bc5c79401749a423b852d296d50b1c
+  .git/objects/4b/825dc642cb6eb9a060e54bf8d69288fbee4904
+  .git/objects/50/08ddfcf53c02e82d7eee2e57c38e5672ef89f6
+  .git/objects/63/48bd88ecdaf3f0b65a82033c72c5c8976e066b
+  .git/objects/66/a513d1f67b1dfa8e4d496d514e84e239d356f8
+  .git/objects/80/fe2a88bbedc0cc161d0aadb55485006da92593
+  .git/objects/8a/8237b285e23e49bfc397a931df9fb78de4ae64
+  .git/objects/91/114bf2f2bba5e0c5252e75018da19b869776f1
+  .git/objects/92/817db32cb0b27ecef7d4b7a649fdad1f2f4c3c
+  .git/objects/b9/737cf512191e186604fdf5b8d43dfa915992f7
+  .git/objects/b9/b1d9ead3c401f838e84725c82c154159e62a56
+  .git/objects/bd/0b3a8d4c6e06525b2e1df1d22a6887178507f6
+  .git/objects/c8/33a2c666716a8e6dc01a2456b9f64ca6a2392b
+  .git/objects/d7/5f824ec6278db24891505b14ab3d915514dba7
+  .git/objects/e1/c05f86fb93b14d5a45c4bfd373acdfc6e2f906
+  .git/objects/e3/280ad70edc9b43379d98f725322755d0f78725
+  .git/objects/e3/e18e4a42293978ec71c6debbabd0d587dc9a18
+  .git/objects/ed/fdbf56223643acbfe51256243a84870f5e01c5
+  .git/objects/f6/9569fe3a941d1cc90ff081ea88e91900a4ca71
+Source packages should not contain undeclared executable files.
+See section ‘Package structure’ in the ‘Writing R Extensions’ manual.
+* checking for hidden files and directories ... NOTE
+Found the following hidden files and directories:
+  .DS_Store
+  .Rhistory
+  .gitignore
+  R/.DS_Store
+  inst/.DS_Store
+  inst/extdata/.DS_Store
+  src/.DS_Store
+  ..Rcheck
+  .Rproj.user
+  .git
+These were most likely included in error. See section ‘Package
+structure’ in the ‘Writing R Extensions’ manual.
+* checking for portable file names ... OK
+* checking for sufficient/correct file permissions ... OK
+* checking whether package ‘GWASLasso’ can be installed ... ERROR
+Installation failed.
+See ‘/Users/jyqian/Dropbox/UKBB/software/packages/GWASLasso/..Rcheck/00install.out’ for details.
+* DONE
+Status: 1 ERROR, 1 WARNING, 1 NOTE
