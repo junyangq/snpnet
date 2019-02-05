@@ -226,7 +226,7 @@ multiply_residuals <- function(x, ...) {
 }
 
 multiply_residuals.BEDMatrix <- function(x, path, i, j, missing, residuals) {
-  out <- .Call("BEDMatrix__multiply_residuals_new", path, x@dims[1], x@dims[2], i, j, missing, residuals, PACKAGE = "GWASLasso")
+  out <- .Call("BEDMatrix__multiply_residuals", path, x@dims[1], x@dims[2], i, j, missing, residuals, PACKAGE = "snpnet")
   # Preserve dimnames
   names <- x@dnames
   dimnames(out) <- list(

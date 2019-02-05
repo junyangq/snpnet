@@ -1,10 +1,10 @@
-Package: GWASLasso
+Package: snpnet
 Type: Package
-Title: What the Package Does (Title Case)
+Title: snpnet: Efficient Lasso Solver for Large Snp Data
 Version: 0.1.0
 Author: Junyang Qian
 Maintainer: The package maintainer <yourself@somewhere.net>
-Description: Fitting the entire lasso solution path on large genotype-phenotype data
+Description: Fitting the entire lasso solution path on large-scale genotype-phenotype data
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
@@ -13,8 +13,7 @@ Imports: glmnet,
     BGData,
     pryr,
     ROCR,
-    Rcpp,
-    BEDMatrix
+    Rcpp
 LinkingTo: Rcpp, BH
 Depends: data.table
 RoxygenNote: 6.0.1
