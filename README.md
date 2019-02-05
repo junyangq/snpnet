@@ -1,1 +1,1 @@
-# GWASLasso - Fit Large-scale Lasso in GWAS
+# Snpnet - Efficient Lasso Solver for Large-scale Snp Data
