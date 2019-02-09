@@ -125,9 +125,10 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
   num.lams <- length(current.lams)
   idx.violation <- which((num.violates != 0) & ((1:num.lams) >= prev.lambda.idx))
   next.lambda.idx <- ifelse(length(idx.violation) == 0, num.lams, min(idx.violation))
-  idx.valid <- which((num.violates == 0) | ((1:num.lams) < prev.lambda.idx))
+  # idx.valid <- which((num.violates == 0) | ((1:num.lams) < prev.lambda.idx))
+  max.valid.idx <- max(next.lambda.idx - 1, 0)
   out <- list(next.lambda.idx = next.lambda.idx, score = abs(prod.full[, next.lambda.idx]),
-              max.valid.idx = ifelse(length(idx.valid) == 0, 0, max(idx.valid))) # < or <=?
+              max.valid.idx = max.valid.idx) # < or <=?
   out
 }
 
