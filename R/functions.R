@@ -80,34 +80,44 @@ computeProduct <- function(residual, chr, subset, stats, configs, path = path, v
 
 
 KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path) {
+  prod_start <- Sys.time()
   prod.full <- computeProduct(residual, chr, subset, stats, configs, verbose, path = path)
-
-  gene.names <- rownames(prod.full)
-  strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
-  strong.names <- rownames(strong.coefs)
+  prod_end <- Sys.time()
+  cat(paste0("Time on pure KKT product: ", prod_end - prod_start, "\n"))
 
   num.lams <- length(current.lams)
-  active <- matrix(FALSE, nrow(prod.full), num.lams)
-  active[match(strong.names, gene.names), ] <- as.matrix(strong.coefs != 0)
-  inactive <- matrix(FALSE, nrow(prod.full), num.lams)
-  inactive[match(strong.names, gene.names), ] <- as.matrix(strong.coefs == 0)
+  strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), ]), rownames(prod.full))
+  weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
 
-  prod.strong <- prod.full[(rownames(prod.full) %in% strong.names), ]
-  prod.weak <- prod.full[!(rownames(prod.full) %in% strong.names), ]
+  mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+  num.violates <- apply(abs(prod.full[weak.vars, ]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
 
-  min.abs.prod.active <- apply(abs(prod.full*active), 2, function(x) min(x[x > 0], na.rm = T))
-  max.abs.prod.active <- apply(abs(prod.full*active), 2, max, na.rm = T)
-  max.abs.prod.inactive <- apply(abs(prod.full*inactive), 2, max, na.rm = T)
-  max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
-  max.abs.prod.weak <- apply(abs(prod.weak), 2, max, na.rm = T)
+  print(data.frame(lambda = current.lams, violations = num.violates))
 
-  # mat.cmp <- matrix(pmax(max.abs.prod.strong, current.lams), nrow = nrow(prod.weak),
-  #                   ncol = length(current.lams), byrow = T)
-  mat.cmp <- matrix(current.lams, nrow = nrow(prod.weak),
-                    ncol = length(current.lams), byrow = T)
-  num.violates <- apply(abs(prod.weak) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
+  idx.violation <- which((num.violates != 0) & ((1:num.lams) >= prev.lambda.idx))
+  next.lambda.idx <- ifelse(length(idx.violation) == 0, num.lams, min(idx.violation))
+  max.valid.idx <- next.lambda.idx - 1  # num.lams >= 1
+  out <- list(next.lambda.idx = next.lambda.idx, score = abs(prod.full[, next.lambda.idx]),
+              max.valid.idx = max.valid.idx)
 
   if (results.verbose) {
+    gene.names <- rownames(prod.full)
+    strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    strong.names <- rownames(strong.coefs)
+    active <- matrix(FALSE, nrow(prod.full), num.lams)
+    active[match(strong.names, gene.names), ] <- as.matrix(strong.coefs != 0)
+    inactive <- matrix(FALSE, nrow(prod.full), num.lams)
+    inactive[match(strong.names, gene.names), ] <- as.matrix(strong.coefs == 0)
+
+    prod.strong <- prod.full[strong.vars, ]
+    prod.weak <- prod.full[weak.vars, ]
+
+    min.abs.prod.active <- apply(abs(prod.full*active), 2, function(x) min(x[x > 0], na.rm = T))
+    max.abs.prod.active <- apply(abs(prod.full*active), 2, max, na.rm = T)
+    max.abs.prod.inactive <- apply(abs(prod.full*inactive), 2, max, na.rm = T)
+    max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
+    max.abs.prod.weak <- apply(abs(prod.weak), 2, max, na.rm = T)
+
     print.out <- data.frame(
       lambda = current.lams,
       num.active = apply(active, 2, sum, na.rm = T),
@@ -121,14 +131,6 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
     )
     print(print.out)
   }
-
-  num.lams <- length(current.lams)
-  idx.violation <- which((num.violates != 0) & ((1:num.lams) >= prev.lambda.idx))
-  next.lambda.idx <- ifelse(length(idx.violation) == 0, num.lams, min(idx.violation))
-  # idx.valid <- which((num.violates == 0) | ((1:num.lams) < prev.lambda.idx))
-  max.valid.idx <- max(next.lambda.idx - 1, 0)
-  out <- list(next.lambda.idx = next.lambda.idx, score = abs(prod.full[, next.lambda.idx]),
-              max.valid.idx = max.valid.idx) # < or <=?
   out
 }
 

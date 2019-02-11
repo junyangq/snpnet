@@ -146,6 +146,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     num.lams <- configs[["nlams.init"]]
     features.to.keep <- names(glmmod$coefficients[-1])
     prev.beta <- NULL
+    num.new.valid <- c()  # track number of new valid solutions every iteration, to adjust length of current lambda seq or size of additional variables
 
     metric.train <- rep(NA, length(full.lams))
     if (validation) metric.val <- rep(NA, length(full.lams))
@@ -159,6 +160,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     lambda.idx <- prev.out$lambda.idx
     num.lams <- prev.out$num.lams
     prev.beta <- prev.out$prev.beta
+    num.new.valid <- prev.out$num.new.valid
     metric.train <- prev.out$metric.train
     if (validation) metric.val <- prev.out$metric.val
     glmnet.results <- prev.out$glmnet.results
@@ -252,9 +254,14 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
                            stats, glmfit, configs, verbose, KKT.verbose, path = paste0(genotype.dir, "train.bed"))
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
-    if (family == "gaussian" && use.glmnetPlus) {
+    if (family == "gaussian" && use.glmnetPlus && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
+    }
+    if (family == "gaussian" && use.glmnetPlus) {
+      num.new.valid[iter] <- check.obj[["max.valid.idx"]]
+    } else {
+      num.new.valid[iter] <- check.obj[["max.valid.idx"]] - ifelse(iter > 1, num.new.valid[iter-1], 0)
     }
     if (check.obj[["max.valid.idx"]] > 0) {
       for (j in 1:check.obj[["max.valid.idx"]]) {
@@ -276,7 +283,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     }
     score <- check.obj[["score"]]
     is.ever.active <- apply(glmfit$beta[, 1:check.obj[["next.lambda.idx"]], drop = F], 1, function(x) any(x != 0))
-    features.to.keep <- rownames(glmfit$beta)[is.ever.active]
+    features.to.keep <- union(rownames(glmfit$beta)[is.ever.active], features.to.keep)
     end.KKT.time <- Sys.time()
     if (verbose) cat("End checking KKT condition.\n")
     if (verbose) print(end.KKT.time - start.KKT.time)
@@ -303,6 +310,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       num.lams = num.lams,
       lambda.idx = lambda.idx,
       score = score,
+      num.new.valid = num.new.valid,
       configs = configs
     )
     if (save) {
