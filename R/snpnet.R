@@ -50,6 +50,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   configs[["standardize.variant"]] <- standardize.variant
   configs[["nlambda"]] <- nlambda
   configs[["early.stopping"]] <- ifelse(early.stopping, stopping.lag, -1)
+  num.snps.batch.diff <- num.snps.batch
   if (save) {
     if (is.null(configs[["meta.dir"]])) configs[["meta.dir"]] <- "meta/"
     if (is.null(configs[["results.dir"]])) configs[["results.dir"]] <- "results/"
@@ -146,7 +147,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     num.lams <- configs[["nlams.init"]]
     features.to.keep <- names(glmmod$coefficients[-1])
     prev.beta <- NULL
-    num.new.valid <- c()  # track number of new valid solutions every iteration, to adjust length of current lambda seq or size of additional variables
+    num.new.valid <- NULL  # track number of new valid solutions every iteration, to adjust length of current lambda seq or size of additional variables
 
     metric.train <- rep(NA, length(full.lams))
     if (validation) metric.val <- rep(NA, length(full.lams))
@@ -160,7 +161,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     lambda.idx <- prev.out$lambda.idx
     num.lams <- prev.out$num.lams
     prev.beta <- prev.out$prev.beta
+    # temporary fix
     num.new.valid <- prev.out$num.new.valid
+    if (is.null(num.new.valid)) num.new.valid <- rep(Inf, prevIter)
     metric.train <- prev.out$metric.train
     if (validation) metric.val <- prev.out$metric.val
     glmnet.results <- prev.out$glmnet.results
@@ -168,7 +171,11 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     a0 <- prev.out$a0
     score <- prev.out$score
     chr.to.keep <- setdiff(features.to.keep, covariates)
+    load_start <- Sys.time()
     features.train[, (chr.to.keep) := prepareFeatures(chr.train, chr.to.keep, stats, rowIdx.subset.train)]
+    load_end <- Sys.time()
+    print("Time spent on loading back features: ")
+    print(load_end - load_start)
     if (validation) features.val[, (chr.to.keep) := prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)]
   }
 
@@ -179,6 +186,8 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     ## extend lambda list if necessary
     num.lams <- min(num.lams + ifelse(lambda.idx >= num.lams-configs[["nlams.delta"]]/2, configs[["nlams.delta"]], 0),
                     configs[["nlambda"]])
+    if (length(num.new.valid) >= 2 && all(tail(num.new.valid, 2) == 0)) num.snps.batch <- num.snps.batch + num.snps.batch.diff
+    num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(tail(num.new.valid, 3))))
 
     ## update feature matrix
     if (verbose) cat("Start updating feature matrix ...\n")
@@ -311,6 +320,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       lambda.idx = lambda.idx,
       score = score,
       num.new.valid = num.new.valid,
+      num.snps.batch = num.snps.batch,
       configs = configs
     )
     if (save) {
