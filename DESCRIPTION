@@ -10,7 +10,7 @@ Encoding: UTF-8
 LazyData: true
 Imports: glmnet,
     BEDMatrix,
-    BGData,
+    BGData (>= 2.0.0),
     pryr,
     ROCR,
     Rcpp
