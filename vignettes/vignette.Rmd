@@ -30,7 +30,7 @@ A config list should be specified to include some meta configurations such as
 - `nlams.delta`: the length of extended lambdas down the sequence when there are few left in the current sequence (remember we don't fit all lambdas every iteration, only extend when most of the current ones have been completed and validated). 2-5 should be reasonable numbers
 
 ```{r}
-library(BEDMatrix)
+# library(BEDMatrix)
 library(snpnet)
 
 configs <- list(
@@ -109,7 +109,7 @@ We may want to compare with `glmnet` solution.
 library(data.table)
 library(glmnet)
 
-chr <- BEDMatrix(paste0(genotype.dir, "train.bed"))
+chr <- BEDMatrixPlus(paste0(genotype.dir, "train.bed"))
 data.X <- chr[, ]
 p <- ncol(data.X)
 pnas <- numeric(p)

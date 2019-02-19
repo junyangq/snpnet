@@ -8,14 +8,9 @@ Description: Fitting the entire lasso solution path on large-scale genotype-phen
 License: GPL-2
 Encoding: UTF-8
 LazyData: true
-Imports: glmnet,
-    BEDMatrix,
-    BGData (>= 2.0.0),
-    pryr,
-    ROCR,
-    Rcpp
+Imports: glmnet, BGData (>= 2.0.0), ROCR, Rcpp, crochet
 LinkingTo: Rcpp, BH
-Depends: data.table
+Depends: data.table, Rcpp, methods
 RoxygenNote: 6.0.1
 Suggests: knitr,
     rmarkdown

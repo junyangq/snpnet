@@ -50,6 +50,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   configs[["standardize.variant"]] <- standardize.variant
   configs[["nlambda"]] <- nlambda
   configs[["early.stopping"]] <- ifelse(early.stopping, stopping.lag, -1)
+  num.snps.batch.diff <- num.snps.batch
   if (save) {
     if (is.null(configs[["meta.dir"]])) configs[["meta.dir"]] <- "meta/"
     if (is.null(configs[["results.dir"]])) configs[["results.dir"]] <- "results/"
@@ -74,12 +75,14 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   phe.master$ID <- as.character(phe.master$ID)
   rownames(phe.master) <- phe.master$ID
 
-  chr.train <- BEDMatrix::BEDMatrix(paste0(genotype.dir, "train.bed"))
+  chr.train <- BEDMatrixPlus(paste0(genotype.dir, "train.bed"))
+  # chr.train <- BEDMatrix::BEDMatrix(paste0(genotype.dir, "train.bed"))
   n.chr.train <- nrow(chr.train)
   ids.chr.train <- sapply(strsplit(rownames(chr.train), split = "_"), function(x) x[[1]])
 
   if (validation) {
-    chr.val <- BEDMatrix::BEDMatrix(paste0(genotype.dir, "val.bed"))
+    chr.val <- BEDMatrixPlus(paste0(genotype.dir, "val.bed"))
+    # chr.val <- BEDMatrix::BEDMatrix(paste0(genotype.dir, "val.bed"))
     n.chr.val <- nrow(chr.val)
     ids.chr.val <- sapply(strsplit(rownames(chr.val), split = "_"), function(x) x[[1]])
   }
@@ -146,6 +149,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     num.lams <- configs[["nlams.init"]]
     features.to.keep <- names(glmmod$coefficients[-1])
     prev.beta <- NULL
+    num.new.valid <- NULL  # track number of new valid solutions every iteration, to adjust length of current lambda seq or size of additional variables
 
     metric.train <- rep(NA, length(full.lams))
     if (validation) metric.val <- rep(NA, length(full.lams))
@@ -159,6 +163,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     lambda.idx <- prev.out$lambda.idx
     num.lams <- prev.out$num.lams
     prev.beta <- prev.out$prev.beta
+    # temporary fix
+    num.new.valid <- prev.out$num.new.valid
+    if (is.null(num.new.valid)) num.new.valid <- rep(Inf, prevIter)
     metric.train <- prev.out$metric.train
     if (validation) metric.val <- prev.out$metric.val
     glmnet.results <- prev.out$glmnet.results
@@ -166,7 +173,11 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     a0 <- prev.out$a0
     score <- prev.out$score
     chr.to.keep <- setdiff(features.to.keep, covariates)
+    load_start <- Sys.time()
     features.train[, (chr.to.keep) := prepareFeatures(chr.train, chr.to.keep, stats, rowIdx.subset.train)]
+    load_end <- Sys.time()
+    print("Time spent on loading back features: ")
+    print(load_end - load_start)
     if (validation) features.val[, (chr.to.keep) := prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)]
   }
 
@@ -177,6 +188,8 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     ## extend lambda list if necessary
     num.lams <- min(num.lams + ifelse(lambda.idx >= num.lams-configs[["nlams.delta"]]/2, configs[["nlams.delta"]], 0),
                     configs[["nlambda"]])
+    if (length(num.new.valid) >= 2 && all(tail(num.new.valid, 2) == 0)) num.snps.batch <- num.snps.batch + num.snps.batch.diff
+    num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(tail(num.new.valid, 3))))
 
     ## update feature matrix
     if (verbose) cat("Start updating feature matrix ...\n")
@@ -193,9 +206,11 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       features.to.add <- names(sorted.score)[1:min(num.snps.batch, length(sorted.score))]
       features.add.train <- prepareFeatures(chr.train, features.to.add, stats, rowIdx.subset.train)
       features.train[, colnames(features.add.train) := features.add.train]
+      rm(features.add.train)
       if (validation) {
         features.add.val <- prepareFeatures(chr.val, features.to.add, stats, rowIdx.subset.val)
         features.val[, colnames(features.add.val) := features.add.val]
+        rm(features.add.val)
       }
     }
     end.update.time <- Sys.time()
@@ -247,14 +262,19 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     # print(pryr::mem_used())
     if (verbose) cat("Start checking KKT condition ...\n")
     start.KKT.time <- Sys.time()
-
+    gc()
     check.obj <- KKT.check(residual.full, chr.train, rowIdx.subset.train, current.lams[start.lams:num.lams], ifelse(family == "gaussian" && use.glmnetPlus, 1, lambda.idx),
                            stats, glmfit, configs, verbose, KKT.verbose, path = paste0(genotype.dir, "train.bed"))
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
-    if (family == "gaussian" && use.glmnetPlus) {
+    if (family == "gaussian" && use.glmnetPlus && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
+    }
+    if (family == "gaussian" && use.glmnetPlus) {
+      num.new.valid[iter] <- check.obj[["max.valid.idx"]]
+    } else {
+      num.new.valid[iter] <- check.obj[["max.valid.idx"]] - ifelse(iter > 1, num.new.valid[iter-1], 0)
     }
     if (check.obj[["max.valid.idx"]] > 0) {
       for (j in 1:check.obj[["max.valid.idx"]]) {
@@ -266,7 +286,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
         start_val_mat_time <- Sys.time()
         print("Time of convertion to validation matrix")
         print(Sys.time() - start_val_mat_time)
-        print(pryr::object_size(features.val))
+        # print(pryr::object_size(features.val))
         start_pred_val_time <- Sys.time()
         pred.val <- predict(glmfit, newx = features.val, lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response.val, family)
@@ -276,7 +296,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     }
     score <- check.obj[["score"]]
     is.ever.active <- apply(glmfit$beta[, 1:check.obj[["next.lambda.idx"]], drop = F], 1, function(x) any(x != 0))
-    features.to.keep <- rownames(glmfit$beta)[is.ever.active]
+    features.to.keep <- union(rownames(glmfit$beta)[is.ever.active], features.to.keep)
     end.KKT.time <- Sys.time()
     if (verbose) cat("End checking KKT condition.\n")
     if (verbose) print(end.KKT.time - start.KKT.time)
@@ -303,6 +323,8 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       num.lams = num.lams,
       lambda.idx = lambda.idx,
       score = score,
+      num.new.valid = num.new.valid,
+      num.snps.batch = num.snps.batch,
       configs = configs
     )
     if (save) {
@@ -316,6 +338,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       cat(paste0("Previous ones: ", paste(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx], collapse = " "), ".\n"))
       break
     }
+    gc()
   }
   end.time.tot <- Sys.time()
   print("Total time elapsed:")
