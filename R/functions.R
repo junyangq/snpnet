@@ -1,11 +1,11 @@
-compute.summary.stats <- function(chr, subset, FUN, file.path, save = F, bufferSize, nCores, verbose = F, recompute = F) {
+compute.summary.stats <- function(chr, subset, FUN, file.path, save = F, chunkSize, nCores, verbose = F, recompute = F) {
   start.time <- Sys.time()
   if (file.exists(file.path) && !recompute) {
     if (verbose) cat(paste0("File ", file.path, " exists. Computation skipped.\n"))
     sum.stats <- readRDS(file.path)
   } else {
     if (verbose) cat(paste0("Start computing stats for ", file.path, " ...\n"))
-    sum.stats <- BGData::chunkedApply(chr, 2, FUN, i = subset, chunkSize = bufferSize, verbose = verbose, nCores = nCores)
+    sum.stats <- BGData::chunkedApply(chr, 2, FUN, i = subset, chunkSize = chunkSize, verbose = verbose, nCores = nCores)
     names(sum.stats) <- colnames(chr)
     if (verbose) cat(paste0("End computing SNP for ", file.path, " ...\n"))
     if (save) {
@@ -18,7 +18,10 @@ compute.summary.stats <- function(chr, subset, FUN, file.path, save = F, bufferS
 }
 
 prepareFeatures <- function(chr, names, stat, subset) {
-  features.add <- chr[, names, drop=FALSE] + 0.0
+  print(str(names))
+  print(length(names))
+  print(chr)
+  features.add <- chr[, names, drop=FALSE]
   features.add <- as.data.table(features.add[subset, ])
   # features.add[, names(features.add) := lapply(.SD, as.numeric)]
   for (j in 1:ncol(features.add)) {
@@ -39,15 +42,15 @@ computeStats <- function(chr, subset, stat, path, save, configs, verbose = F) {
   out <- list()
   if ("pnas" %in% stat) {
     out[["pnas"]] <- compute.summary.stats(chr, subset, function(x) mean(is.na(x)),
-                        paste0(path, "pnas.rda"), save = save, bufferSize = configs[["bufferSize"]], nCores = configs[["nCores"]], verbose)
+                        paste0(path, "pnas.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
   }
   if ("means" %in% stat) {
     out[["means"]] <- compute.summary.stats(chr, subset, function(x) mean(x, na.rm = T),
-                         paste0(path, "means.rda"), save = save, bufferSize = configs[["bufferSize"]], nCores = configs[["nCores"]], verbose)
+                         paste0(path, "means.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
   }
   if (("sds" %in% stat) && configs[["standardize.variant"]]) {
     snp.mst <- compute.summary.stats(chr, subset, function(x) mean(x*x, na.rm = T),
-                                     paste0(path, "mst.rda"), save = save, bufferSize = configs[["bufferSize"]], nCores = configs[["nCores"]], verbose)
+                                     paste0(path, "mst.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
     out[["sds"]] <- sqrt((snp.mst - out[["means"]]^2))
   }
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
@@ -143,54 +146,6 @@ computeMetric <- function(pred, response, family) {
   }
 }
 
-
-chunkedApply_missing <- function(X, residuals, missing = NULL, bufferSize = 5000L, nTasks = nCores, nCores = getOption("mc.cores", 2L), verbose = FALSE, path = path, ...) {
-  if (!length(dim(X))) {
-    stop("dim(X) must have a positive length")
-  }
-  nTasks <- as.integer(nTasks)
-  if (is.na(nTasks) || nTasks < 1L) {
-    stop("nTasks has to be greater than 0")
-  }
-  # # Convert index types
-  # if (is.logical(i)) {
-  #   i <- which(i)
-  # } else if (is.character(i)) {
-  #   i <- match(i, rownames(X))
-  # }
-  # if (is.logical(j)) {
-  #   j <- which(j)
-  # } else if (is.character(j)) {
-  #   j <- match(j, colnames(X))
-  # }
-  dimX <- dim(X)
-  if (is.null(bufferSize)) {
-    bufferSize <- dimX[2]
-    nBuffers <- 1L
-  } else {
-    nBuffers <- ceiling(dimX[2] / bufferSize)
-  }
-  bufferRanges <- LinkedMatrix:::chunkRanges(dimX[2], nBuffers)
-  # browser()
-  res <- lapply(seq_len(nBuffers), function(whichBuffer) {
-    if (verbose) {
-      message("Buffer ", whichBuffer, " of ", nBuffers, " ...")
-    }
-    if (nTasks == 1L) {
-      multiply_residuals(X, path, bufferRanges[1L, whichBuffer], bufferRanges[2L, whichBuffer], missing, residuals)
-    } else {
-      bufferIndex <- bufferRanges[, whichBuffer]
-      taskIndex <- LinkedMatrix:::chunkRanges(bufferIndex[2]-bufferIndex[1]+1, nTasks) + bufferIndex[1] - 1
-      res <- parallel::mclapply(X = seq_len(nTasks), FUN = function(whichTask, ...) {
-        # taskIndex <- bufferIndex[cut(bufferIndex, breaks = nTasks, labels = FALSE) == whichTask]
-        multiply_residuals(X, path, taskIndex[1, whichTask], taskIndex[2, whichTask], missing, residuals)
-      }, ..., mc.preschedule = FALSE, mc.cores = nCores)
-      simplifyList_Col(res)
-    }
-  })
-  simplifyList_Col(res)
-}
-
 simplifyList_Col <- function(x) {
   sample <- x[[1L]]
   if (is.matrix(sample)) {
@@ -199,20 +154,4 @@ simplifyList_Col <- function(x) {
     x <- unlist(x)
   }
   return(x)
-}
-
-multiply_residuals <- function(x, ...) {
-  UseMethod("multiply_residuals", x)
-}
-
-multiply_residuals.BEDMatrix <- function(x, path, js, je, missing, residuals) {
-  out <- .Call("BEDMatrix__multiply_residuals", path, x@dims[1], x@dims[2], js, je, missing, residuals, PACKAGE = "snpnet")
-  # Preserve dimnames
-  names <- x@dnames
-  dimnames(out) <- list(
-    names[[2L]][js:je],
-    colnames(residuals)
-  )
-  # return(out)
-  out
 }
