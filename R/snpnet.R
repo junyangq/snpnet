@@ -44,7 +44,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
                       validation = FALSE,
                       covariates = c("age", "sex", paste0("PC", 1:10)), num.snps.batch = 1000, glmnet.thresh = 1E-7, configs, verbose = TRUE,
                       save = FALSE, use.glmnetPlus = (family == "gaussian"), early.stopping = TRUE, stopping.lag = 2,
-                      KKT.verbose = F, prevIter = 0) {
+                      KKT.verbose = F, prevIter = 0, increase.size = 500) {
   if (prevIter >= niter) stop("prevIter is greater or equal to the number of iterations.")
   configs[["covariates"]] <- covariates
   configs[["standardize.variant"]] <- standardize.variant
@@ -153,6 +153,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
     metric.train <- rep(NA, length(full.lams))
     if (validation) metric.val <- rep(NA, length(full.lams))
+    increase.snp.size <- FALSE
     glmnet.results <- list()
     beta <- list()
     a0 <- list()
@@ -172,6 +173,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     beta <- prev.out$beta
     a0 <- prev.out$a0
     score <- prev.out$score
+    increase.snp.size <- prev.out$increase.snp.size
     chr.to.keep <- setdiff(features.to.keep, covariates)
     load_start <- Sys.time()
     features.train[, (chr.to.keep) := prepareFeatures(chr.train, chr.to.keep, stats, rowIdx.subset.train)]
@@ -188,8 +190,8 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     ## extend lambda list if necessary
     num.lams <- min(num.lams + ifelse(lambda.idx >= num.lams-configs[["nlams.delta"]]/2, configs[["nlams.delta"]], 0),
                     configs[["nlambda"]])
-    if (length(num.new.valid) >= 2 && all(tail(num.new.valid, 2) == 0)) num.snps.batch <- num.snps.batch + num.snps.batch.diff
-    num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(tail(num.new.valid, 3))))
+    # if (length(num.new.valid) >= 2 && all(tail(num.new.valid, 2) == 0)) num.snps.batch <- num.snps.batch + num.snps.batch.diff
+    num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(tail(num.new.valid, 3), 1))))
 
     ## update feature matrix
     if (verbose) cat("Start updating feature matrix ...\n")
@@ -212,8 +214,12 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
         features.val[, colnames(features.add.val) := features.add.val]
         rm(features.add.val)
       }
+    } else {
+      break
     }
     end.update.time <- Sys.time()
+    if (increase.snp.size)  # increase batch size when no new valid solution is found in the previous iteration, but after another round of adding new variables
+      num.snps.batch <- num.snps.batch + increase.size
     if (verbose) cat("End updating feature matrix.\n")
     if (verbose) print(end.update.time - start.update.time)
 
@@ -230,7 +236,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (family == "gaussian" && use.glmnetPlus) {
       start.lams <- lambda.idx   # start index in the whole lambda sequence
       if (!is.null(prev.beta)) {
-        beta0 <- rep(0, ncol(features.train))
+        beta0 <- rep(1e-20, ncol(features.train))
         beta0[match(names(prev.beta), colnames(features.train))] <- prev.beta
       } else {
         beta0 <- prev.beta
@@ -293,10 +299,15 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
         print("Time of prediction on validation matrix")
         print(Sys.time() - start_pred_val_time)
       }
+      score <- check.obj[["score"]]
+      is.ever.active <- apply(glmfit$beta[, 1:check.obj[["max.valid.idx"]], drop = F], 1, function(x) any(x != 0))
+      features.to.keep <- union(rownames(glmfit$beta)[is.ever.active], features.to.keep)
+      increase.snp.size <- FALSE
     }
-    score <- check.obj[["score"]]
-    is.ever.active <- apply(glmfit$beta[, 1:check.obj[["next.lambda.idx"]], drop = F], 1, function(x) any(x != 0))
-    features.to.keep <- union(rownames(glmfit$beta)[is.ever.active], features.to.keep)
+    if (check.obj[["max.valid.idx"]] == 0) {
+      features.to.keep <- union(features.to.keep, features.to.add)
+      increase.snp.size <- TRUE
+    }
     end.KKT.time <- Sys.time()
     if (verbose) cat("End checking KKT condition.\n")
     if (verbose) print(end.KKT.time - start.KKT.time)
@@ -325,6 +336,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       score = score,
       num.new.valid = num.new.valid,
       num.snps.batch = num.snps.batch,
+      increase.snp.size = increase.snp.size,
       configs = configs
     )
     if (save) {
