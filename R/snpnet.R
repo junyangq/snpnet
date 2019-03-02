@@ -69,20 +69,20 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
   start.time.tot <- Sys.time()
 
-  if (save) dir.create(paste0(results.dir, configs[["meta.dir"]]), showWarnings = FALSE, recursive = T)
+  if (save) dir.create(file.path(results.dir, configs[["meta.dir"]]), showWarnings = FALSE, recursive = T)
 
   phe.master <- fread(phenotype.file)
   phe.master$ID <- as.character(phe.master$ID)
   rownames(phe.master) <- phe.master$ID
 
-  chr.train <- BEDMatrixPlus(paste0(genotype.dir, "train.bed"))
-  # chr.train <- BEDMatrix::BEDMatrix(paste0(genotype.dir, "train.bed"))
+  chr.train <- BEDMatrixPlus(file.path(genotype.dir, "train.bed"))
+  # chr.train <- BEDMatrix::BEDMatrix(file.path(genotype.dir, "train.bed"))
   n.chr.train <- nrow(chr.train)
   ids.chr.train <- sapply(strsplit(rownames(chr.train), split = "_"), function(x) x[[1]])
 
   if (validation) {
-    chr.val <- BEDMatrixPlus(paste0(genotype.dir, "val.bed"))
-    # chr.val <- BEDMatrix::BEDMatrix(paste0(genotype.dir, "val.bed"))
+    chr.val <- BEDMatrixPlus(file.path(genotype.dir, "val.bed"))
+    # chr.val <- BEDMatrix::BEDMatrix(file.path(genotype.dir, "val.bed"))
     n.chr.val <- nrow(chr.val)
     ids.chr.val <- sapply(strsplit(rownames(chr.val), split = "_"), function(x) x[[1]])
   }
@@ -106,7 +106,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   rowIdx.subset.train <- which(ids.chr.train %in% phe.master$ID[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
   n.subset.train <- length(rowIdx.subset.train)
   stats <- computeStats(chr.train, rowIdx.subset.train, stat = c("pnas", "means", "sds"),
-                        path = paste0(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose)
+                        path = file.path(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose)
   phe.train <- phe.master[match(ids.chr.train, phe.master$ID), ]
   features.train <- phe.train[, covariates, with = F]
   features.train <- features.train[rowIdx.subset.train, ]
@@ -137,7 +137,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     rownames(residual.full) <- ids.chr.train[rowIdx.subset.train]
 
     if (verbose) cat(paste0("Start computing KKT product for initialization ...\n"))
-    prod.full <- computeProduct(residual.full, chr.train, rowIdx.subset.train, stats, configs, verbose = verbose, path = paste0(genotype.dir, "train.bed"))
+    prod.full <- computeProduct(residual.full, chr.train, rowIdx.subset.train, stats, configs, verbose = verbose, path = file.path(genotype.dir, "train.bed"))
     score <- abs(prod.full[, 1])
     if (verbose) cat(paste0("End computing KKT product for initialization. \n"))
 
@@ -157,7 +157,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     beta <- list()
     a0 <- list()
   } else {
-    prev.out <- readRDS(paste0(results.dir, configs[["results.dir"]], "output_iter_", prevIter, ".rda"))
+    prev.out <- readRDS(file.path(results.dir, configs[["results.dir"]], "output_iter_", prevIter, ".rda"))
     full.lams <- prev.out$full.lambda
     features.to.keep <- prev.out$features.to.keep
     lambda.idx <- prev.out$lambda.idx
@@ -264,7 +264,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     start.KKT.time <- Sys.time()
     gc()
     check.obj <- KKT.check(residual.full, chr.train, rowIdx.subset.train, current.lams[start.lams:num.lams], ifelse(family == "gaussian" && use.glmnetPlus, 1, lambda.idx),
-                           stats, glmfit, configs, verbose, KKT.verbose, path = paste0(genotype.dir, "train.bed"))
+                           stats, glmfit, configs, verbose, KKT.verbose, path = file.path(genotype.dir, "train.bed"))
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
     if (family == "gaussian" && use.glmnetPlus && check.obj[["max.valid.idx"]] > 0) {
@@ -328,8 +328,8 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       configs = configs
     )
     if (save) {
-      dir.create(paste0(results.dir, configs[["results.dir"]]), showWarnings = FALSE, recursive = T)
-      saveRDS(out, paste0(results.dir, configs[["results.dir"]], "output_iter_", iter, ".rda"))
+      dir.create(file.path(results.dir, configs[["results.dir"]]), showWarnings = FALSE, recursive = T)
+      saveRDS(out, file.path(results.dir, configs[["results.dir"]], "output_iter_", iter, ".rda"))
     }
 
     if (max.valid.idx == configs[["nlambda"]]) break
