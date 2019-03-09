@@ -73,7 +73,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
   phe.master <- fread(phenotype.file)
   phe.master$ID <- as.character(phe.master$ID)
-  rownames(phe.master) <- phe.master$ID
+  rownames(phe.master) <- phe.master$ID #### change to FID_IID
 
   chr.train <- BEDMatrixPlus(paste0(genotype.dir, "train.bed"))
   # chr.train <- BEDMatrix::BEDMatrix(paste0(genotype.dir, "train.bed"))
@@ -233,7 +233,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     # print("Size of training set: ")
     # print(pryr::object_size(features.train))
     # print(Sys.time() - start_time)
-    if (family == "gaussian" && use.glmnetPlus) {
+    if (family == "gaussian" && use.glmnetPlus) { #######
       start.lams <- lambda.idx   # start index in the whole lambda sequence
       if (!is.null(prev.beta)) {
         beta0 <- rep(1e-20, ncol(features.train))

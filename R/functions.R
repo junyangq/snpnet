@@ -79,7 +79,7 @@ computeProduct <- function(residual, chr, subset, stats, configs, path = path, v
 }
 
 
-KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path) {
+KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path, aggressive = FALSE) {
   prod_start <- Sys.time()
   prod.full <- computeProduct(residual, chr, subset, stats, configs, verbose, path = path)
   prod_end <- Sys.time()
@@ -89,7 +89,14 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
   strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), ]), rownames(prod.full))
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
 
-  mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+  if (aggressive) {
+    strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    prod.strong <- prod.full[strong.vars, ]
+    max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
+    mat.cmp <- matrix(max.abs.prod.strong, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+  } else {
+    mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+  }
   num.violates <- apply(abs(prod.full[weak.vars, ]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
 
   print(data.frame(lambda = current.lams, violations = num.violates))
