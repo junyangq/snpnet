@@ -71,7 +71,7 @@ If we want to recover results and continue the procedure from a previous job, we
 
 
 ```{r}
-genotype.dir <- paste0(system.file("extdata", package = "snpnet"), "/")
+genotype.dir <- system.file("extdata", package = "snpnet")
 phenotype.file <- system.file("extdata", "sample_phe.phe", package = "snpnet")
 
 # use glmnetPlus

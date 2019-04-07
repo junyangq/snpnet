@@ -71,20 +71,26 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
   if (save) dir.create(file.path(results.dir, configs[["meta.dir"]]), showWarnings = FALSE, recursive = T)
 
-  phe.master <- fread(phenotype.file)
-  phe.master$ID <- as.character(phe.master$ID)
+  phe.master <- fread(
+    phenotype.file,
+    sep='\t',
+#    data.table=FALSE
+  )
+  phe.master$FID <- as.character(phe.master$FID)
+  phe.master$IID <- as.character(phe.master$IID)
+  phe.master$ID <- apply( phe.master[ , c('FID', 'IID') ] , 1 , paste , collapse = "_" )
   rownames(phe.master) <- phe.master$ID
 
   chr.train <- BEDMatrixPlus(file.path(genotype.dir, "train.bed"))
   # chr.train <- BEDMatrix::BEDMatrix(file.path(genotype.dir, "train.bed"))
   n.chr.train <- nrow(chr.train)
-  ids.chr.train <- sapply(strsplit(rownames(chr.train), split = "_"), function(x) x[[1]])
+  ids.chr.train <- rownames(chr.train)
 
   if (validation) {
     chr.val <- BEDMatrixPlus(file.path(genotype.dir, "val.bed"))
     # chr.val <- BEDMatrix::BEDMatrix(file.path(genotype.dir, "val.bed"))
     n.chr.val <- nrow(chr.val)
-    ids.chr.val <- sapply(strsplit(rownames(chr.val), split = "_"), function(x) x[[1]])
+    ids.chr.val <- rownames(chr.val)
   }
 
   # asssume IDs in the genotype matrix must exist in the phenotype matrix, and stop if not
