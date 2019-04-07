@@ -334,7 +334,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
     if (max.valid.idx == configs[["nlambda"]]) break
     if (early.stopping && validation && max.valid.idx > 2 && all(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-stopping.lag)]))) {
-      cat(paste0("Early stopped at iteration ", iter, "with validation metric: ", max(metric.val, na.rm = T), "\n"))
+      cat(paste0("Early stopped at iteration ", iter, " with validation metric: ", max(metric.val, na.rm = T), "\n"))
       cat(paste0("Previous ones: ", paste(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx], collapse = " "), ".\n"))
       break
     }
