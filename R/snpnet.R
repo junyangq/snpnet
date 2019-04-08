@@ -72,7 +72,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   if (save) dir.create(file.path(results.dir, configs[["meta.dir"]]), showWarnings = FALSE, recursive = T)
 
   phe.master <- fread(
-    phenotype.file,
+    paste0('cat ', phenotype.file, "| sed -e 's/^#//g'"),
     sep='\t',
 #    data.table=FALSE
   )
