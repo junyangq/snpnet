@@ -86,11 +86,19 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
   cat(paste0("Time on pure KKT product: ", prod_end - prod_start, "\n"))
 
   num.lams <- length(current.lams)
-  strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), ]), rownames(prod.full))
+  if (length(configs[["covariates"]]) > 0) {
+    strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), ]), rownames(prod.full))
+  } else {
+    strong.vars <- match(rownames(glmfit$beta), rownames(prod.full))
+  }
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
 
   if (aggressive) {
-    strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    if (length(configs[["covariates"]]) > 0) {
+      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    } else {
+      strong.coefs <- glmfit$beta
+    }
     prod.strong <- prod.full[strong.vars, ]
     max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
     mat.cmp <- matrix(max.abs.prod.strong, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
@@ -114,7 +122,11 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
 
   if (results.verbose) {
     gene.names <- rownames(prod.full)
-    strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    if (length(configs[["covariates"]]) > 0) {
+      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    } else {
+      strong.coefs <- glmfit$beta
+    }
     strong.names <- rownames(strong.coefs)
     active <- matrix(FALSE, nrow(prod.full), num.lams)
     active[match(strong.names, gene.names), ] <- as.matrix(strong.coefs != 0)

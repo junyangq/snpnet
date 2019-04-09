@@ -108,15 +108,23 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   stats <- computeStats(chr.train, rowIdx.subset.train, stat = c("pnas", "means", "sds"),
                         path = paste0(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose)
   phe.train <- phe.master[match(ids.chr.train, phe.master$ID), ]
-  features.train <- phe.train[, covariates, with = F]
-  features.train <- features.train[rowIdx.subset.train, ]
+  if (length(covariates) > 0) {
+    features.train <- phe.train[, covariates, with = F]
+    features.train <- features.train[rowIdx.subset.train, ]
+  } else {
+    features.train <- NULL
+  }
 
   if (validation) {
     rowIdx.subset.val <- which(ids.chr.val %in% phe.master$ID[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
     n.subset.val <- length(rowIdx.subset.val)
     phe.val <- phe.master[match(ids.chr.val, phe.master$ID), ]
-    features.val <- phe.val[, covariates, with = F]
-    features.val <- features.val[rowIdx.subset.val, ]
+    if (length(covariates) > 0) {
+      features.val <- phe.val[, covariates, with = F]
+      features.val <- features.val[rowIdx.subset.val, ]
+    } else {
+      features.val <- NULL
+    }
   }
 
   ## Process phenotype
@@ -131,7 +139,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
   if (prevIter == 0) {
     ## fit adjustment covariates
-    form <- as.formula(paste(phenotype, "~ ", paste(covariates, collapse = " + ")))
+    form <- as.formula(paste(phenotype, "~ ", paste(c(1, covariates), collapse = " + ")))
     glmmod <- glm(form, data = phe.train, family = family, subset = rowIdx.subset.train)
     residual.full <- matrix(residuals(glmmod, type = "response"), ncol = 1)
     rownames(residual.full) <- ids.chr.train[rowIdx.subset.train]
@@ -176,7 +184,11 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     increase.snp.size <- prev.out$increase.snp.size
     chr.to.keep <- setdiff(features.to.keep, covariates)
     load_start <- Sys.time()
-    features.train[, (chr.to.keep) := prepareFeatures(chr.train, chr.to.keep, stats, rowIdx.subset.train)]
+    if (!is.null(features.train)) {
+      features.train[, (chr.to.keep) := prepareFeatures(chr.train, chr.to.keep, stats, rowIdx.subset.train)]
+    } else {
+      features.train <- prepareFeatures(chr.train, chr.to.keep, stats, rowIdx.subset.train)
+    }
     load_end <- Sys.time()
     print("Time spent on loading back features: ")
     print(load_end - load_start)
@@ -196,23 +208,33 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     ## update feature matrix
     if (verbose) cat("Start updating feature matrix ...\n")
     start.update.time <- Sys.time()
-    features.to.discard <- setdiff(colnames(features.train), features.to.keep)
-    if (length(features.to.discard) > 0) {
-      features.train[, (features.to.discard) := NULL]
-      if (validation) features.val[, (features.to.discard) := NULL]
+    if (iter > 1) {
+      features.to.discard <- setdiff(colnames(features.train), features.to.keep)
+      if (length(features.to.discard) > 0) {
+        features.train[, (features.to.discard) := NULL]
+        if (validation) features.val[, (features.to.discard) := NULL]
+      }
+      which.in.model <- which(names(score) %in% colnames(features.train))
+      score[which.in.model] <- NA
     }
-    which.in.model <- which(names(score) %in% colnames(features.train))
-    score[which.in.model] <- NA
     sorted.score <- sort(score, decreasing = T, na.last = NA)
     if (length(sorted.score) > 0) {
       features.to.add <- names(sorted.score)[1:min(num.snps.batch, length(sorted.score))]
       features.add.train <- prepareFeatures(chr.train, features.to.add, stats, rowIdx.subset.train)
-      features.train[, colnames(features.add.train) := features.add.train]
-      rm(features.add.train)
+      if (!is.null(features.train)) {
+        features.train[, colnames(features.add.train) := features.add.train]
+        rm(features.add.train)
+      } else {
+        features.train <- features.add.train
+      }
       if (validation) {
         features.add.val <- prepareFeatures(chr.val, features.to.add, stats, rowIdx.subset.val)
-        features.val[, colnames(features.add.val) := features.add.val]
-        rm(features.add.val)
+        if (!is.null(features.val)) {
+          features.val[, colnames(features.add.val) := features.add.val]
+          rm(features.add.val)
+        } else {
+          features.val <- features.add.val
+        }
       }
     } else {
       break
@@ -226,7 +248,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     ## fit glmnet
     if (verbose) cat("Start fitting Glmnet ...\n")
     penalty.factor <- rep(1, ncol(features.train))
-    penalty.factor[1:length(covariates)] <- 0
+    penalty.factor[seq_len(length(covariates))] <- 0
     current.lams <- full.lams[1:num.lams]
     current.lams.adjusted <- full.lams[1:num.lams] * sum(penalty.factor) / length(penalty.factor)  # adjustment to counteract penalty factor normalization in glmnet
     start_time <- Sys.time()
