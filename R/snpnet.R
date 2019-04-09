@@ -288,7 +288,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
         print(Sys.time() - start_val_mat_time)
         # print(pryr::object_size(features.val))
         start_pred_val_time <- Sys.time()
-        pred.val <- predict(glmfit, newx = features.val, lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+        pred.val <- predict(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response.val, family)
         print("Time of prediction on validation matrix")
         print(Sys.time() - start_pred_val_time)
