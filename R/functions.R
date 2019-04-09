@@ -79,30 +79,54 @@ computeProduct <- function(residual, chr, subset, stats, configs, path = path, v
 }
 
 
-KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path) {
+KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path, aggressive = FALSE) {
   prod_start <- Sys.time()
   prod.full <- computeProduct(residual, chr, subset, stats, configs, verbose, path = path)
   prod_end <- Sys.time()
   cat(paste0("Time on pure KKT product: ", prod_end - prod_start, "\n"))
 
   num.lams <- length(current.lams)
-  strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), ]), rownames(prod.full))
+  if (length(configs[["covariates"]]) > 0) {
+    strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), ]), rownames(prod.full))
+  } else {
+    strong.vars <- match(rownames(glmfit$beta), rownames(prod.full))
+  }
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
 
-  mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+  if (aggressive) {
+    if (length(configs[["covariates"]]) > 0) {
+      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    } else {
+      strong.coefs <- glmfit$beta
+    }
+    prod.strong <- prod.full[strong.vars, ]
+    max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
+    mat.cmp <- matrix(max.abs.prod.strong, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+  } else {
+    mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+  }
   num.violates <- apply(abs(prod.full[weak.vars, ]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
 
   print(data.frame(lambda = current.lams, violations = num.violates))
 
   idx.violation <- which((num.violates != 0) & ((1:num.lams) >= prev.lambda.idx))
-  next.lambda.idx <- ifelse(length(idx.violation) == 0, num.lams, min(idx.violation))
+  next.lambda.idx <- ifelse(length(idx.violation) == 0, num.lams+1, min(idx.violation))
   max.valid.idx <- next.lambda.idx - 1  # num.lams >= 1
-  out <- list(next.lambda.idx = next.lambda.idx, score = abs(prod.full[, next.lambda.idx]),
+  if (max.valid.idx > 0) {
+    score <- abs(prod.full[, max.valid.idx])
+  } else {
+    score <- NULL
+  }
+  out <- list(next.lambda.idx = next.lambda.idx, score = score,
               max.valid.idx = max.valid.idx)
 
   if (results.verbose) {
     gene.names <- rownames(prod.full)
-    strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    if (length(configs[["covariates"]]) > 0) {
+      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
+    } else {
+      strong.coefs <- glmfit$beta
+    }
     strong.names <- rownames(strong.coefs)
     active <- matrix(FALSE, nrow(prod.full), num.lams)
     active[match(strong.names, gene.names), ] <- as.matrix(strong.coefs != 0)
