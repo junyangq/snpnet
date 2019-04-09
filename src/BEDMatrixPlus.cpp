@@ -147,7 +147,7 @@ RcppExport SEXP BEDMatrixPlus__new(SEXP path_, SEXP n_, SEXP p_) {
         forward_exception_to_r(ex);
         return 0;
     }
-};
+}
 
 Rcpp::NumericMatrix BEDMatrixPlus::extract_matrix(Rcpp::IntegerVector i, Rcpp::IntegerVector j) {
     // Check if indexes are out of bounds
@@ -254,7 +254,7 @@ RcppExport SEXP BEDMatrixPlus__multiply_residuals(SEXP xp_, SEXP js_, SEXP je_, 
         forward_exception_to_r(ex);
         return 0;
     }
-};
+}
 
 
 RcppExport SEXP BEDMatrixPlus__extract_matrix(SEXP xp_, SEXP i_, SEXP j_) {
@@ -285,4 +285,4 @@ RcppExport SEXP BEDMatrixPlus__extract_columns(SEXP xp_, SEXP j_) {
         forward_exception_to_r(ex);
         return 0;
     }
-};
+}

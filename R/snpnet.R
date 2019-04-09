@@ -316,7 +316,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
         print(Sys.time() - start_val_mat_time)
         # print(pryr::object_size(features.val))
         start_pred_val_time <- Sys.time()
-        pred.val <- predict(glmfit, newx = features.val, lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+        pred.val <- predict(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response.val, family)
         print("Time of prediction on validation matrix")
         print(Sys.time() - start_pred_val_time)
@@ -368,7 +368,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
     if (max.valid.idx == configs[["nlambda"]]) break
     if (early.stopping && validation && max.valid.idx > 2 && all(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-stopping.lag)]))) {
-      cat(paste0("Early stopped at iteration ", iter, "with validation metric: ", max(metric.val, na.rm = T), "\n"))
+      cat(paste0("Early stopped at iteration ", iter, " with validation metric: ", max(metric.val, na.rm = T), "\n"))
       cat(paste0("Previous ones: ", paste(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx], collapse = " "), ".\n"))
       break
     }
