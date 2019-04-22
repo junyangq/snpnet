@@ -192,7 +192,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     load_end <- Sys.time()
     print("Time spent on loading back features: ")
     print(load_end - load_start)
-    if (validation) features.val[, (chr.to.keep) := prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)]
+    if (validation && (!is.null(features.val))) features.val[, (chr.to.keep) := prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)]
   }
 
   for (iter in (prevIter+1):niter) {
@@ -212,7 +212,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       features.to.discard <- setdiff(colnames(features.train), features.to.keep)
       if (length(features.to.discard) > 0) {
         features.train[, (features.to.discard) := NULL]
-        if (validation) features.val[, (features.to.discard) := NULL]
+        if (validation && (!is.null(features.val))) features.val[, (features.to.discard) := NULL]
       }
       which.in.model <- which(names(score) %in% colnames(features.train))
       score[which.in.model] <- NA
