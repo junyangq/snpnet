@@ -167,6 +167,12 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     a0 <- list()
   } else {
     prev.out <- readRDS(file.path(results.dir, configs[["results.dir"]], paste0("output_iter_", prevIter, ".rda")))
+    if(early.stopping && validation && (prev.out$max.valid.idx > stopping.lag) &&
+       (which.max(prev.out$metric.val) <= (prev.out$max.valid.idx - stopping.lag))){
+        cat(paste0("Early stopped at iteration ", prevIter, " with validation metric: ", max(prev.out$metric.val, na.rm = T), "\n"))
+        cat(paste0("Previous ones: ", paste(prev.out$metric.val[(prev.out$max.valid.idx-stopping.lag+1):prev.out$max.valid.idx], collapse = " "), ".\n"))
+        return(prev.out)
+    }
     full.lams <- prev.out$full.lambda
     features.to.keep <- prev.out$features.to.keep
     lambda.idx <- prev.out$lambda.idx
@@ -373,7 +379,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     }
 
     if (max.valid.idx == configs[["nlambda"]]) break
-    if (early.stopping && validation && max.valid.idx > 2 && all(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-stopping.lag)]))) {
+    if (early.stopping && validation && max.valid.idx > stopping.lag && all(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-stopping.lag)]))) {
       cat(paste0("Early stopped at iteration ", iter, " with validation metric: ", max(metric.val, na.rm = T), "\n"))
       cat(paste0("Previous ones: ", paste(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx], collapse = " "), ".\n"))
       break

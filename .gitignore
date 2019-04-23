@@ -8,3 +8,4 @@ man
 .Ruserdata
 inst/doc
 .DS_Store
+.ipynb_checkpoints
