@@ -192,7 +192,13 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     load_end <- Sys.time()
     print("Time spent on loading back features: ")
     print(load_end - load_start)
-    if (validation) features.val[, (chr.to.keep) := prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)]
+    if (validation) {
+      if (!is.null(features.val)) {
+        features.val[, (chr.to.keep) := prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)]
+      } else {
+        features.val <- prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)
+      }
+    }
   }
 
   for (iter in (prevIter+1):niter) {
