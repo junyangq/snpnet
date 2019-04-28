@@ -99,13 +99,13 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
     } else {
       strong.coefs <- glmfit$beta
     }
-    prod.strong <- prod.full[strong.vars, ]
+    prod.strong <- prod.full[strong.vars, , drop = FALSE]
     max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
     mat.cmp <- matrix(max.abs.prod.strong, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
   } else {
     mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
   }
-  num.violates <- apply(abs(prod.full[weak.vars, ]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
+  num.violates <- apply(abs(prod.full[weak.vars, , drop = FALSE]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
 
   print(data.frame(lambda = current.lams, violations = num.violates))
 
@@ -133,8 +133,8 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
     inactive <- matrix(FALSE, nrow(prod.full), num.lams)
     inactive[match(strong.names, gene.names), ] <- as.matrix(strong.coefs == 0)
 
-    prod.strong <- prod.full[strong.vars, ]
-    prod.weak <- prod.full[weak.vars, ]
+    prod.strong <- prod.full[strong.vars, , drop = FALSE]
+    prod.weak <- prod.full[weak.vars, , drop = FALSE]
 
     min.abs.prod.active <- apply(abs(prod.full*active), 2, function(x) min(x[x > 0], na.rm = T))
     max.abs.prod.active <- apply(abs(prod.full*active), 2, max, na.rm = T)
