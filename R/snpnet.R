@@ -40,7 +40,7 @@
 #' @useDynLib snpnet, .registration=TRUE
 #' @export
 snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, niter = 10,
-                      family = NULL, standardize.variant = FALSE, nlambda = 100,
+                      family = NULL, standardize.variant = FALSE, nlambda = 100, lambda.min.ratio = NULL,
                       validation = FALSE,
                       covariates = c("age", "sex", paste0("PC", 1:10)), num.snps.batch = 1000, glmnet.thresh = 1E-7, configs, verbose = TRUE,
                       save = FALSE, use.glmnetPlus = (family == "gaussian"), early.stopping = TRUE, stopping.lag = 2,
@@ -150,7 +150,10 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (verbose) cat(paste0("End computing KKT product for initialization. \n"))
 
     ## compute full lambdas
-    configs[["lambda.min.ratio"]] <- ifelse(n.subset.train < ncol(chr.train)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)
+    if (is.null(lambda.min.ratio)) {
+      lambda.min.ratio <- ifelse(n.subset.train < ncol(chr.train)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)
+    }
+    configs[["lambda.min.ratio"]] <- lambda.min.ratio
     full.lams <- computeLambdas(score, configs)
 
     lambda.idx <- 1

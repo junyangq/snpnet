@@ -42,24 +42,24 @@ computeStats <- function(chr, subset, stat, path, save, configs, verbose = F) {
   out <- list()
   if ("pnas" %in% stat) {
     out[["pnas"]] <- compute.summary.stats(chr, subset, function(x) mean(is.na(x)),
-                        paste0(path, "pnas.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
+                        file.path(path, "pnas.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
   }
   if ("means" %in% stat) {
     out[["means"]] <- compute.summary.stats(chr, subset, function(x) mean(x, na.rm = T),
-                         paste0(path, "means.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
+                         file.path(path, "means.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
   }
   if (("sds" %in% stat) && configs[["standardize.variant"]]) {
     snp.mst <- compute.summary.stats(chr, subset, function(x) mean(x*x, na.rm = T),
-                                     paste0(path, "mst.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
+                                     file.path(path, "mst.rda"), save = save, chunkSize = configs[["chunkSize"]], nCores = configs[["nCores"]], verbose)
     out[["sds"]] <- sqrt((snp.mst - out[["means"]]^2))
   }
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
-  if (save) saveRDS(out[["excludeSNP"]], file = paste0(path, "excludeSNP.rda"))
+  if (save) saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
   out
 }
 
 
-computeProduct <- function(residual, chr, subset, stats, configs, path = path, verbose = T) {
+computeProduct <- function(residual, chr, subset, stats, configs, path, verbose = T) {
   n.chr <- nrow(chr)
   n.subset <- length(subset)
   residual.full <- matrix(0, n.chr, ncol(residual))
