@@ -87,7 +87,7 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
 
   num.lams <- length(current.lams)
   if (length(configs[["covariates"]]) > 0) {
-    strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), ]), rownames(prod.full))
+    strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), , drop = FALSE]), rownames(prod.full))
   } else {
     strong.vars <- match(rownames(glmfit$beta), rownames(prod.full))
   }
