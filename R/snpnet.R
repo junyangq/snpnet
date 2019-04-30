@@ -1,7 +1,7 @@
 #' Fit the Lasso for Large Phenotype-Genotype Datasets
 #'
-#' Fit the entire lasso solution path in an iterative way on large genomics datasets, in particular
-#' phenotype-genotype datasets.
+#' Fit the entire lasso solution path using the Batch Screening Iterative Lasso (BASIL) algorithm
+#' on large phenotype-genotype datasets.
 #'
 #' @param genotype.dir the directory that contains genotype files. Assume at least the existence of
 #'                     train.bed/bim/fam, and val.bed/bim/fam if validation option is on.
@@ -14,37 +14,42 @@
 #' @param family the type of the phenotype: "gaussian" or "binomial". If not provided or NULL, it will be
 #'               detected based on the number of levels in the response
 #' @param standardize.variant a logical value indicating whether the variants are standardized in
-#'                            the lasso fitting. Default is FALSE. For SNP matrix, we may not want to standardize since the
-#'                            variants are already on the same scale.
+#'                            the lasso fitting. Default is FALSE. For SNP matrix, we may not want
+#'                            to standardize since the variants are already on the same scale.
 #' @param nlambda the number of lambda values on the solution path. Default is 100.
+#' @param lambda.min.ratio the ratio of the minimum lambda considered versus the maximum lambda that
+#'                         makes all penalized coefficients zero.
 #' @param validation a logical value indicating if performance is evaluated on the validation set. If so,
 #'                   val.bed/bim/fam should be available in genotype.dir.
 #' @param covariates a character vector containing the names of the covariates included in the lasso
 #'                   fitting, whose coefficients will not be penalized. The names must exist in the
 #'                   column names of the phenotype file.
 #' @param num.snps.batch the number of variants added to the strong set in each iteration. Default is 1000.
-#' @param glmnet.thresh the convergence threshold for glmnet/glmnetPlus
+#' @param glmnet.thresh the convergence threshold used in glmnet/glmnetPlus
+#' @param configs a list of other config parameters
+#' @param verbose a logical value indicating if more detailed messages should be printed
 #' @param save a logical value whether to save intermediate results (e.g. in case of job failure and restart)
 #' @param use.glmnetPlus a logical value whether to use glmnet with warm start, if the glmnetPlus
 #'                       package is available. Currently only "gaussian" family is supported
 #' @param early.stopping a logical value indicating whether early stopping based on validation
 #'                       metric is desired
 #' @param stopping.lag a parameter for the stopping criterion such that the procedure stops after
-#'                     this number of consecutive decreases in the validation performance
+#'                     this number of consecutive decreases in the validation metric
 #' @param KKT.verbose a logical value indicating if details on KKT check should be printed
 #' @param prevIter if non-zero, it indicates the last successful iteration in the procedure so that
 #'                 we can restart from there. niter should be no less than prevIter.
+#' @param increase.size the increase in batch size if the KKT condition fails often in recent iterations.
 #'
-#' @return a list containing the solution path, the metric evaluated on training/validation set.
+#' @return a list containing the solution path, the metric evaluated on training/validation set and others.
 #'
 #' @useDynLib snpnet, .registration=TRUE
 #' @export
 snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, niter = 10,
-                      family = NULL, standardize.variant = FALSE, nlambda = 100, lambda.min.ratio = NULL,
-                      validation = FALSE,
-                      covariates = c("age", "sex", paste0("PC", 1:10)), num.snps.batch = 1000, glmnet.thresh = 1E-7, configs, verbose = TRUE,
-                      save = FALSE, use.glmnetPlus = (family == "gaussian"), early.stopping = TRUE, stopping.lag = 2,
-                      KKT.verbose = F, prevIter = 0, increase.size = 500) {
+                   family = NULL, standardize.variant = FALSE, nlambda = 100, lambda.min.ratio = NULL,
+                   validation = FALSE, covariates = c("age", "sex", paste0("PC", 1:10)),
+                   num.snps.batch = 1000, glmnet.thresh = 1E-7, configs, verbose = TRUE,
+                   save = FALSE, use.glmnetPlus = (family == "gaussian"), early.stopping = TRUE,
+                   stopping.lag = 2, KKT.verbose = F, prevIter = 0, increase.size = 500) {
   if (prevIter >= niter) stop("prevIter is greater or equal to the number of iterations.")
   configs[["covariates"]] <- covariates
   configs[["standardize.variant"]] <- standardize.variant
@@ -73,16 +78,14 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
   phe.master <- fread(phenotype.file)
   phe.master$ID <- as.character(phe.master$ID)
-  rownames(phe.master) <- phe.master$ID #### change to FID_IID
+  rownames(phe.master) <- phe.master$ID
 
   chr.train <- BEDMatrixPlus(file.path(genotype.dir, "train.bed"))
-  # chr.train <- BEDMatrix::BEDMatrix(file.path(genotype.dir, "train.bed"))
   n.chr.train <- nrow(chr.train)
   ids.chr.train <- sapply(strsplit(rownames(chr.train), split = "_"), function(x) x[[1]])
 
   if (validation) {
     chr.val <- BEDMatrixPlus(file.path(genotype.dir, "val.bed"))
-    # chr.val <- BEDMatrix::BEDMatrix(file.path(genotype.dir, "val.bed"))
     n.chr.val <- nrow(chr.val)
     ids.chr.val <- sapply(strsplit(rownames(chr.val), split = "_"), function(x) x[[1]])
   }
@@ -211,7 +214,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     ## extend lambda list if necessary
     num.lams <- min(num.lams + ifelse(lambda.idx >= num.lams-configs[["nlams.delta"]]/2, configs[["nlams.delta"]], 0),
                     configs[["nlambda"]])
-    # if (length(num.new.valid) >= 2 && all(tail(num.new.valid, 2) == 0)) num.snps.batch <- num.snps.batch + num.snps.batch.diff
     num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(tail(num.new.valid, 3), 1))))
 
     ## update feature matrix
@@ -261,10 +263,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     current.lams <- full.lams[1:num.lams]
     current.lams.adjusted <- full.lams[1:num.lams] * sum(penalty.factor) / length(penalty.factor)  # adjustment to counteract penalty factor normalization in glmnet
     start_time <- Sys.time()
-    # print("Size of training set: ")
-    # print(pryr::object_size(features.train))
-    # print(Sys.time() - start_time)
-    if (family == "gaussian" && use.glmnetPlus) { #######
+    if (family == "gaussian" && use.glmnetPlus) {
       start.lams <- lambda.idx   # start index in the whole lambda sequence
       if (!is.null(prev.beta)) {
         beta0 <- rep(1e-20, ncol(features.train))
@@ -288,15 +287,11 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       residual.full <- response.train - pred.train
       rm(features.train.matrix) # save memory
     }
-    # end_pred_time <- Sys.time()
-    # print("Time usage for prediction on training set.")
-    # print(end_pred_time - start_pred_time)
     end_time <- Sys.time()
     if (verbose) cat("End fitting Glmnet.\n")
     if (verbose) print(end_time - start_time)
 
     ## KKT Check
-    # print(pryr::mem_used())
     if (verbose) cat("Start checking KKT condition ...\n")
     start.KKT.time <- Sys.time()
     gc()
@@ -323,7 +318,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
         start_val_mat_time <- Sys.time()
         print("Time of convertion to validation matrix")
         print(Sys.time() - start_val_mat_time)
-        # print(pryr::object_size(features.val))
         start_pred_val_time <- Sys.time()
         pred.val <- predict(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response.val, family)
