@@ -17,12 +17,8 @@ compute.summary.stats <- function(chr, subset, FUN, file.path, save = FALSE, chu
 }
 
 prepareFeatures <- function(chr, names, stat, subset) {
-  # print(str(names))
-  # print(length(names))
-  # print(chr)
   features.add <- chr[, names, drop=FALSE]
   features.add <- as.data.table(features.add[subset, ])
-  # features.add[, names(features.add) := lapply(.SD, as.numeric)]
   for (j in 1:ncol(features.add)) {
     set(features.add, i=which(is.na(features.add[[j]])), j=j, value=stat[["means"]][names[j]])
   }

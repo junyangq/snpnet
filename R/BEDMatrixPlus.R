@@ -1,3 +1,8 @@
+#################################################################################
+###  This is a modified version from BEDMatrix (for the purpose of extension) ###
+###               https://github.com/QuantGen/BEDMatrix                       ###
+#################################################################################
+
 # Delimiters used in PED files
 delims <- "[ \t]"
 
@@ -148,17 +153,6 @@ chunkedApply_missing <- function(X, residuals, missing = NULL, bufferSize = 5000
   if (is.na(nTasks) || nTasks < 1L) {
     stop("nTasks has to be greater than 0")
   }
-  # # Convert index types
-  # if (is.logical(i)) {
-  #   i <- which(i)
-  # } else if (is.character(i)) {
-  #   i <- match(i, rownames(X))
-  # }
-  # if (is.logical(j)) {
-  #   j <- which(j)
-  # } else if (is.character(j)) {
-  #   j <- match(j, colnames(X))
-  # }
   dimX <- dim(X)
   if (is.null(bufferSize)) {
     bufferSize <- dimX[2]
@@ -199,6 +193,5 @@ multiply_residuals.BEDMatrixPlus <- function(x, path, js, je, missing, residuals
     names[[2L]][js:je],
     colnames(residuals)
   )
-  # return(out)
   out
 }
