@@ -61,11 +61,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (is.null(configs[["results.dir"]])) configs[["results.dir"]] <- "results/"
   }
 
-  # if (use.glmnetPlus) {
-  if (!require("glmnetPlus")) stop("glmnetPlus is not installed.")
-  glmnet.settings <- glmnetPlus::glmnet.control()
-  on.exit(do.call(glmnetPlus::glmnet.control, glmnet.settings))
-  glmnetPlus::glmnet.control(fdev = 0, devmax = 1)
+
+  # if (!require("glmnetPlus")) stop("glmnetPlus is not installed.")
+
   # } else {
   #   glmnet.settings <- glmnet::glmnet.control()
   #   on.exit(do.call(glmnet::glmnet.control, glmnet.settings))
@@ -105,6 +103,28 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       family <- "gaussian"
     }
   }
+
+  if (!requireNamespace("glmnet") && !requireNamespace("glmnetPlus"))
+    stop("Please install at least glmnet or glmnetPlus.")
+  if (use.glmnetPlus) {
+    if (!requireNamespace("glmnetPlus")) {
+      warning("use.glmnetPlus was set to TRUE but glmnetPlus not found... Revert back to glmnet.")
+      use.glmnetPlus <- FALSE
+    } else if (family != "gaussian") {
+      warning("glmnetPlus currently does not support non-gaussian family... Revert back to glmnet.")
+      use.glmnetPlus <- FALSE
+    }
+  }
+  if (use.glmnetPlus) {
+    glmnet.settings <- glmnetPlus::glmnet.control()
+    on.exit(do.call(glmnetPlus::glmnet.control, glmnet.settings))
+    glmnetPlus::glmnet.control(fdev = 0, devmax = 1)
+  } else {
+    glmnet.settings <- glmnet::glmnet.control()
+    on.exit(do.call(glmnet::glmnet.control, glmnet.settings))
+    glmnet::glmnet.control(fdev = 0, devmax = 1)
+  }
+
   if (family == "binomial") phe.master[, phenotype] <- phe.master[, ..phenotype] - 1
   rowIdx.subset.train <- which(ids.chr.train %in% phe.master$ID[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
   n.subset.train <- length(rowIdx.subset.train)
@@ -263,7 +283,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     current.lams <- full.lams[1:num.lams]
     current.lams.adjusted <- full.lams[1:num.lams] * sum(penalty.factor) / length(penalty.factor)  # adjustment to counteract penalty factor normalization in glmnet
     start_time <- Sys.time()
-    if (family == "gaussian" && use.glmnetPlus) {
+    if (use.glmnetPlus) {
       start.lams <- lambda.idx   # start index in the whole lambda sequence
       if (!is.null(prev.beta)) {
         beta0 <- rep(1e-20, ncol(features.train))
@@ -275,11 +295,11 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     } else {
       start.lams <- 1
       features.train.matrix <- as.matrix(features.train)
-      glmfit <- glmnetPlus::glmnet(features.train.matrix, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = standardize.variant, thresh = glmnet.thresh, type.gaussian = "naive")
+      glmfit <- glmnet::glmnet(features.train.matrix, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = standardize.variant, thresh = glmnet.thresh, type.gaussian = "naive")
     }
     glmnet.results[[iter]] <- glmfit
     # start_pred_time <- Sys.time()
-    if (family == "gaussian" && use.glmnetPlus) {
+    if (use.glmnetPlus) {
       residual.full <- glmfit$residuals
       pred.train <- response.train - residual.full
     } else {
@@ -295,15 +315,15 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (verbose) cat("Start checking KKT condition ...\n")
     start.KKT.time <- Sys.time()
     gc()
-    check.obj <- KKT.check(residual.full, chr.train, rowIdx.subset.train, current.lams[start.lams:num.lams], ifelse(family == "gaussian" && use.glmnetPlus, 1, lambda.idx),
+    check.obj <- KKT.check(residual.full, chr.train, rowIdx.subset.train, current.lams[start.lams:num.lams], ifelse(use.glmnetPlus, 1, lambda.idx),
                            stats, glmfit, configs, verbose, KKT.verbose, path = file.path(genotype.dir, "train.bed"))
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
-    if (family == "gaussian" && use.glmnetPlus && check.obj[["max.valid.idx"]] > 0) {
+    if (use.glmnetPlus && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
     }
-    if (family == "gaussian" && use.glmnetPlus) {
+    if (use.glmnetPlus) {
       num.new.valid[iter] <- check.obj[["max.valid.idx"]]
     } else {
       num.new.valid[iter] <- check.obj[["max.valid.idx"]] - ifelse(iter > 1, num.new.valid[iter-1], 0)

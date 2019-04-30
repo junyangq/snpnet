@@ -13,5 +13,6 @@ LinkingTo: Rcpp, BH
 Depends: data.table, Rcpp, methods
 RoxygenNote: 6.0.1
 Suggests: knitr,
-    rmarkdown
+    rmarkdown,
+    glmnetPlus
 VignetteBuilder: knitr
