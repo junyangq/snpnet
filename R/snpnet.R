@@ -169,29 +169,14 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     num.new.valid <- NULL  # track number of new valid solutions every iteration, to adjust length of current lambda seq or size of additional variables
 
     metric.train <- rep(NA, length(full.lams))
-    if (validation) metric.val <- rep(NA, length(full.lams))
+    metric.val <- rep(NA, length(full.lams))
+
     increase.snp.size <- FALSE
     glmnet.results <- list()
     beta <- list()
     a0 <- list()
   } else {
-    ### load back intermediate variables ###
-    prev.out <- readRDS(file.path(results.dir, configs[["results.dir"]], paste0("output_iter_", prevIter, ".rda")))
-    full.lams <- prev.out$full.lams
-    features.to.keep <- prev.out$features.to.keep
-    lambda.idx <- prev.out$lambda.idx
-    num.lams <- prev.out$num.lams
-    prev.beta <- prev.out$prev.beta
-    # temporary fix
-    num.new.valid <- prev.out$num.new.valid
-    if (is.null(num.new.valid)) num.new.valid <- rep(Inf, prevIter)
-    metric.train <- prev.out$metric.train
-    if (validation) metric.val <- prev.out$metric.val
-    glmnet.results <- prev.out$glmnet.results
-    beta <- prev.out$beta
-    a0 <- prev.out$a0
-    score <- prev.out$score
-    increase.snp.size <- prev.out$increase.snp.size
+    load(file.path(results.dir, configs[["results.dir"]], paste0("output_iter_", prevIter, ".RData")))
     chr.to.keep <- setdiff(features.to.keep, covariates)
     load_start <- Sys.time()
     if (!is.null(features.train)) {
@@ -348,28 +333,12 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (verbose) cat("Total time to current iteration: \n")
     if (verbose) print(end.iter.time - start.time.tot)
 
-    out <- list(
-      metric.train = metric.train,
-      metric.val = (if (validation) metric.val else NULL),
-      glmnet.results = glmnet.results,
-      full.lams = full.lams,
-      a0 = a0,
-      beta = beta,
-      prev.beta = prev.beta,
-      max.valid.idx = max.valid.idx,
-      features.to.keep = features.to.keep,
-      iter = iter,
-      num.lams = num.lams,
-      lambda.idx = lambda.idx,
-      score = score,
-      num.new.valid = num.new.valid,
-      num.snps.batch = num.snps.batch,
-      increase.snp.size = increase.snp.size,
-      configs = configs
-    )
     if (save) {
       dir.create(file.path(results.dir, configs[["results.dir"]]), showWarnings = FALSE, recursive = T)
-      saveRDS(out, file.path(results.dir, configs[["results.dir"]], paste0("output_iter_", iter, ".rda")))
+      save(metric.train, metric.val, glmnet.results, full.lams, a0, beta, prev.beta, max.valid.idx,
+           features.to.keep, num.lams, lambda.idx, score, num.new.valid, num.snps.batch,
+           increase.snp.size, configs,
+           file = file.path(results.dir, configs[["results.dir"]], paste0("output_iter_", iter, ".RData")))
     }
 
     if (max.valid.idx == configs[["nlambda"]]) break
