@@ -61,15 +61,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (is.null(configs[["results.dir"]])) configs[["results.dir"]] <- "results/"
   }
 
-
-  # if (!require("glmnetPlus")) stop("glmnetPlus is not installed.")
-
-  # } else {
-  #   glmnet.settings <- glmnet::glmnet.control()
-  #   on.exit(do.call(glmnet::glmnet.control, glmnet.settings))
-  #   glmnet::glmnet.control(fdev = 0, devmax = 1)
-  # }
-
   start.time.tot <- Sys.time()
 
   if (save) dir.create(file.path(results.dir, configs[["meta.dir"]]), showWarnings = FALSE, recursive = T)
@@ -104,17 +95,8 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     }
   }
 
-  if (!requireNamespace("glmnet") && !requireNamespace("glmnetPlus"))
-    stop("Please install at least glmnet or glmnetPlus.")
-  if (use.glmnetPlus) {
-    if (!requireNamespace("glmnetPlus")) {
-      warning("use.glmnetPlus was set to TRUE but glmnetPlus not found... Revert back to glmnet.")
-      use.glmnetPlus <- FALSE
-    } else if (family != "gaussian") {
-      warning("glmnetPlus currently does not support non-gaussian family... Revert back to glmnet.")
-      use.glmnetPlus <- FALSE
-    }
-  }
+  ### --- Check whether to use glmnet or glmnetPlus --- ###
+  use.glmnetPlus <- checkGlmnetPlus(use.glmnetPlus, family)
   if (use.glmnetPlus) {
     glmnet.settings <- glmnetPlus::glmnet.control()
     on.exit(do.call(glmnetPlus::glmnet.control, glmnet.settings))
@@ -124,6 +106,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     on.exit(do.call(glmnet::glmnet.control, glmnet.settings))
     glmnet::glmnet.control(fdev = 0, devmax = 1)
   }
+  ### --- Check whether to use glmnet or glmnetPlus --- ###
 
   if (family == "binomial") phe.master[, phenotype] <- phe.master[, ..phenotype] - 1
   rowIdx.subset.train <- which(ids.chr.train %in% phe.master$ID[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
@@ -192,8 +175,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     beta <- list()
     a0 <- list()
   } else {
+    ### load back intermediate variables ###
     prev.out <- readRDS(file.path(results.dir, configs[["results.dir"]], paste0("output_iter_", prevIter, ".rda")))
-    full.lams <- prev.out$full.lambda
+    full.lams <- prev.out$full.lams
     features.to.keep <- prev.out$features.to.keep
     lambda.idx <- prev.out$lambda.idx
     num.lams <- prev.out$num.lams
@@ -231,9 +215,8 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     cat(paste0("Start iteration ", iter, "...\n"))
     start.iter.time <- Sys.time()
 
-    ## extend lambda list if necessary
     num.lams <- min(num.lams + ifelse(lambda.idx >= num.lams-configs[["nlams.delta"]]/2, configs[["nlams.delta"]], 0),
-                    configs[["nlambda"]])
+                    configs[["nlambda"]])   ## extend lambda list if necessary
     num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(tail(num.new.valid, 3), 1))))
 
     ## update feature matrix
@@ -369,7 +352,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       metric.train = metric.train,
       metric.val = (if (validation) metric.val else NULL),
       glmnet.results = glmnet.results,
-      full.lambda = full.lams,
+      full.lams = full.lams,
       a0 = a0,
       beta = beta,
       prev.beta = prev.beta,

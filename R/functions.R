@@ -179,3 +179,18 @@ simplifyList_Col <- function(x) {
   }
   return(x)
 }
+
+checkGlmnetPlus <- function(use.glmnetPlus, family) {
+  if (!requireNamespace("glmnet") && !requireNamespace("glmnetPlus"))
+    stop("Please install at least glmnet or glmnetPlus.")
+  if (use.glmnetPlus) {
+    if (!requireNamespace("glmnetPlus")) {
+      warning("use.glmnetPlus was set to TRUE but glmnetPlus not found... Revert back to glmnet.")
+      use.glmnetPlus <- FALSE
+    } else if (family != "gaussian") {
+      warning("glmnetPlus currently does not support non-gaussian family... Revert back to glmnet.")
+      use.glmnetPlus <- FALSE
+    }
+  }
+  use.glmnetPlus
+}
