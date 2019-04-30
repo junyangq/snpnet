@@ -39,6 +39,8 @@
 #' @param prevIter if non-zero, it indicates the last successful iteration in the procedure so that
 #'                 we can restart from there. niter should be no less than prevIter.
 #' @param increase.size the increase in batch size if the KKT condition fails often in recent iterations.
+#' @param buffer.verbose a logical value indicating if progress is printed when computing inner product
+#'                       with the memory-mapped SNP matrix
 #'
 #' @return a list containing the solution path, the metric evaluated on training/validation set and others.
 #'
@@ -132,7 +134,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   response.train <- phe.train[[phenotype]][rowIdx.subset.train]
   if (validation) response.val <- phe.val[[phenotype]][rowIdx.subset.val]
 
-  cat("Preprocessing end:", as.character(Sys.time()), "\n")
+  cat("Preprocessing end:", as.character(Sys.time()), "\n\n")
 
   if (prevIter == 0) {
     cat("Iteration 0. Now time:", as.character(Sys.time()), "\n")
@@ -189,7 +191,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     cat("Time elapsed on loading back features:", time_diff(load_start, load_end), "\n")
     prev.max.valid.idx <- max.valid.idx
   }
-
+  cat("\n")
 
   for (iter in (prevIter+1):niter) {
     cat("Iteration ", iter, ". Now time: ", as.character(Sys.time()), "\n", sep = "")
@@ -199,7 +201,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
                     configs[["nlambda"]])   ## extend lambda list if necessary
     num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(tail(num.new.valid, 3), 1))))
 
-    ## update feature matrix
+    ### --- Update the feature matrix --- ###
     if (verbose) cat("  Start updating feature matrix ...\n")
     start.update.time <- Sys.time()
     if (iter > 1) {
@@ -242,7 +244,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       cat("  -- Number of newly added variables: ", length(features.to.add), ".\n", sep = "")
       cat("  -- Total number of variables in the strong set: ", ncol(features.train), ".\n", sep = "")
     }
-    ## fit glmnet
+    ### --- Fit glmnet --- ###
     if (verbose) cat("  Start fitting Glmnet ...\n")
     penalty.factor <- rep(1, ncol(features.train))
     penalty.factor[seq_len(length(covariates))] <- 0
@@ -264,7 +266,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       glmfit <- glmnet::glmnet(features.train.matrix, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = standardize.variant, thresh = glmnet.thresh, type.gaussian = "naive")
     }
     glmnet.results[[iter]] <- glmfit
-    # start_pred_time <- Sys.time()
     if (use.glmnetPlus) {
       residual.full <- glmfit$residuals
       pred.train <- response.train - residual.full
@@ -276,7 +277,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     end_time_glmnet <- Sys.time()
     if (verbose) cat("  End fitting Glmnet. Elapsed time:", time_diff(start_time_glmnet, end_time_glmnet), "\n")
 
-    ## KKT Check
+    ### --- KKT Check --- ###
     if (verbose) cat("  Start checking KKT condition ...\n")
     start.KKT.time <- Sys.time()
     gc()
@@ -320,11 +321,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     }
     end.KKT.time <- Sys.time()
     if (verbose) cat("  End checking KKT condition. Elapsed time:", time_diff(start.KKT.time, end.KKT.time), "\n")
-    end.iter.time <- Sys.time()
-    # cat("Time on current iteration: \n")
-    # print(end.iter.time - start.iter.time)
-    # if (verbose) cat("Total time to current iteration: \n")
-    # if (verbose) print(end.iter.time - start.time.tot)
 
     if (save) {
       save(metric.train, metric.val, glmnet.results, full.lams, a0, beta, prev.beta, max.valid.idx,
@@ -344,7 +340,11 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       }
       prev.max.valid.idx <- max.valid.idx
     }
+    end.iter.time <- Sys.time()
+    cat("Time spent on this iteration: ", time_diff(start.iter.time, end.iter.time), ". ", sep = "")
+    cat("Elapsed time since start: ", time_diff(start.time.tot, end.iter.time), ".\n\n", sep = "")
 
+    ### --- Check stopping criteria --- ####
     if (max.valid.idx == configs[["nlambda"]]) break
     if (early.stopping && validation && max.valid.idx > 2 && all(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-stopping.lag)]))) {
       cat("Early stopped at iteration ", iter, " with validation metric: ", max(metric.val, na.rm = T), ".\n", sep = "")
