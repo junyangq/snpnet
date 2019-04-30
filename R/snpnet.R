@@ -50,21 +50,12 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
                    num.snps.batch = 1000, glmnet.thresh = 1E-7, configs, verbose = TRUE,
                    save = FALSE, use.glmnetPlus = (family == "gaussian"), early.stopping = TRUE,
                    stopping.lag = 2, KKT.verbose = FALSE, prevIter = 0, increase.size = 500) {
+
   if (prevIter >= niter) stop("prevIter is greater or equal to the number of iterations.")
-  configs[["covariates"]] <- covariates
-  configs[["standardize.variant"]] <- standardize.variant
-  configs[["nlambda"]] <- nlambda
-  configs[["early.stopping"]] <- ifelse(early.stopping, stopping.lag, -1)
-  num.snps.batch.diff <- num.snps.batch
-  if (save) {
-    if (is.null(configs[["meta.dir"]])) configs[["meta.dir"]] <- "meta/"
-    if (is.null(configs[["results.dir"]])) configs[["results.dir"]] <- "results/"
-  }
+  configs <- setup_configs_directories(configs, covariates, standardize.variant, nlambda, early.stopping,
+                           stopping.lag, save, results.dir)
 
   start.time.tot <- Sys.time()
-
-  if (save) dir.create(file.path(results.dir, configs[["meta.dir"]]), showWarnings = FALSE, recursive = T)
-
   phe.master <- fread(phenotype.file)
   phe.master$ID <- as.character(phe.master$ID)
   rownames(phe.master) <- phe.master$ID
@@ -334,7 +325,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (verbose) print(end.iter.time - start.time.tot)
 
     if (save) {
-      dir.create(file.path(results.dir, configs[["results.dir"]]), showWarnings = FALSE, recursive = T)
       save(metric.train, metric.val, glmnet.results, full.lams, a0, beta, prev.beta, max.valid.idx,
            features.to.keep, num.lams, lambda.idx, score, num.new.valid, num.snps.batch,
            increase.snp.size, configs,

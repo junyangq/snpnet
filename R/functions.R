@@ -194,3 +194,18 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
   }
   use.glmnetPlus
 }
+
+setup_configs <- function(configs, covariates, standardize.variant, nlambda, early.stopping,
+                          stopping.lag, save, results.dir) {
+  configs[["covariates"]] <- covariates
+  configs[["standardize.variant"]] <- standardize.variant
+  configs[["nlambda"]] <- nlambda
+  configs[["early.stopping"]] <- ifelse(early.stopping, stopping.lag, -1)
+  if (save) {
+    if (is.null(configs[["meta.dir"]])) configs[["meta.dir"]] <- "meta/"
+    if (is.null(configs[["results.dir"]])) configs[["results.dir"]] <- "results/"
+    dir.create(file.path(results.dir, configs[["meta.dir"]]), showWarnings = FALSE, recursive = T)
+    dir.create(file.path(results.dir, configs[["results.dir"]]), showWarnings = FALSE, recursive = T)
+  }
+  configs
+}
