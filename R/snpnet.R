@@ -49,7 +49,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
                    validation = FALSE, covariates = c("age", "sex", paste0("PC", 1:10)),
                    num.snps.batch = 1000, glmnet.thresh = 1E-7, configs, verbose = TRUE,
                    save = FALSE, use.glmnetPlus = (family == "gaussian"), early.stopping = TRUE,
-                   stopping.lag = 2, KKT.verbose = F, prevIter = 0, increase.size = 500) {
+                   stopping.lag = 2, KKT.verbose = FALSE, prevIter = 0, increase.size = 500) {
   if (prevIter >= niter) stop("prevIter is greater or equal to the number of iterations.")
   configs[["covariates"]] <- covariates
   configs[["standardize.variant"]] <- standardize.variant
@@ -353,5 +353,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   print("Total time elapsed:")
   print(end.time.tot - start.time.tot)
 
+  out <- list(metric.train, metric.val, glmnet.results, full.lams, a0, beta, configs)
   out
 }
