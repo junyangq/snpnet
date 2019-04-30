@@ -85,7 +85,7 @@ out <- snpnet(
   validation = FALSE,
   configs = configs,
   use.glmnetPlus = TRUE,
-  verbose = FALSE,
+  verbose = TRUE,
   save = FALSE,
   glmnet.thresh = 1e-12
 )
