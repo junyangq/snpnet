@@ -6,6 +6,7 @@
 # Delimiters used in PED files
 delims <- "[ \t]"
 
+#' @import Rcpp
 initialize <- function(.Object, path, n = NULL, p = NULL) {
   path <- path.expand(path)
   if (!file.exists(path)) {

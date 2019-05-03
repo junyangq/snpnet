@@ -18,33 +18,59 @@ knitr::opts_chunk$set(
 
 Snpnet is a package that is used to fit the lasso on big genomics data. We assume the data are stored in bed/bim/fam format by the [PLINK library](https://www.cog-genomics.org/plink2/formats#bed), and the training part is named by train.bed/bim/fam and if provided the validation part by val.bed/bim/fam.
 
+The most important parameters in the core function `snpnet` include:
+
+- `genotype.dir`: the directory that contains genotype files. Assume at least the existence of train.bed/bim/fam, and val.bed/bim/fam if validation option is on. We assume that individuals that appear in train/val.bed/bim/fam should all appear also in the phenotype table. The individual ID in genotype files take the format `ID_ID` while the ID in the phenotype file takes the format `ID`.
+- `phenotype.file`: the path of the file that contains the phenotype values and can be read as a table.
+- `phenotype`: the name of the phenotype. Must be the same as the corresponding column name in the phenotype file.
+- `covariates`: a character vector containing the names of the covariates included in the lasso fitting, whose coefficients will not be penalized. The names must exist in the column names of the phenotype file.
+- `results.dir`: the path to the directory where meta and intermediate results are saved.
+- `family`: the type of the phenotype: "gaussian" or "binomial".
+- `standardize.variant`: a logical value indicating whether the variants are standardized in the lasso fitting. For SNP matrix, we may not want to standardize since the variants are already on the same scale.
+- `nlambda`: the number of lambda values on the solution path.
+- `lambda.min.ratio`: the ratio of the minimum lambda considered versus the maximum lambda that makes all penalized coefficients zero.
+- `niter`: the number of maximum iteration in the algorithm.
+- `num.snps.batch`: the number of variants added to the strong set in each iteration. Default is 1000.
+- `save`: a logical value whether to save intermediate results (e.g. in case of job failure and restart).
+- `configs`: a list of additional config parameters described below.
+- `validation`: a logical value indicating if performance is evaluated on the validation set. If so, `val.bed/bim/fam` should be available in `genotype.dir`.
+
+Others include: 
+
+- `use.glmnetPlus`: a logical value whether to use glmnet with warm start, if the glmnetPlus package is available. Currently only "gaussian" family is supported.
+- `early.stopping`: a logical value indicating whether early stopping based on validation metric is desired. Default is `TRUE`.
+- `stopping.lag`: a parameter for the stopping criterion such that the procedure stops after this number of consecutive decreases in the validation performance. Default is 2.
+- `KKT.verbose`: a logical value indicating if details on KKT check should be printed.
+- `prevIter`: if non-zero, it indicates the last successful iteration in the procedure so that we can restart from there. niter should be no less than prevIter.
+                 
+If we want to recover results and continue the procedure from a previous job, we should have `save = TRUE` and specify in `prevIter` the index of the last successful iteration.
+
+
 A config list should be specified to include some meta configurations such as
 
-- `missing.rate`: variants are excluded if the missing rate exceeds this level
-- `MAF.thresh`: variants are excluded if the minor allele frequency (MAF) exceeds this level
-- `nCores`: the number of cores used for computation. You may use the maximum number of cores available on the computer
-- `bufferSize`: the maximum number of SNP columns we want to load at a time subject to memory bound (used in KKT check). For example, a dataset of 200K $\times$ 10K takes around 15 Gbs of memory
-- `chunkSize`: ...
-- `meta.dir`: the relative path to the subdirectory used to store the computed summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`). Needed when `save = T` specified in the main function. Default is `"meta.dir/`
-- `results.dir`: the relative path to the subdirectory used to store the intermediate results so that we may look into or recover from later. Needed when `save = T` specified in the main function. Default is `"results.dir/`
-- `nlams.init`: the number of lambdas considered in the first iteration. 10 is a reasonable number to start with
-- `nlams.delta`: the length of extended lambdas down the sequence when there are few left in the current sequence (remember we don't fit all lambdas every iteration, only extend when most of the current ones have been completed and validated). 2-5 should be reasonable numbers
+- `missing.rate`: variants are excluded if the missing rate exceeds this level. Default is 0.05.
+- `MAF.thresh`: variants are excluded if the minor allele frequency (MAF) exceeds this level. Default is 0.001.
+- `nCores`: the number of cores used for computation. You may use the maximum number of cores available on the computer. Default is 1.
+- `bufferSize` (required): the maximum number of SNP columns we want to load at a time subject to memory bound (used in KKT check). For example, a dataset of 200K $\times$ 10K takes around 15 Gbs of memory. 
+- `meta.dir`: the relative path to the subdirectory used to store the computed summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`). Needed when `save = T` specified in the main function. Default is `"meta.dir/`.
+- `results.dir`: the relative path to the subdirectory used to store the intermediate results so that we may look into or recover from later. Needed when `save = T` specified in the main function. Default is `"results/`.
+- `nlams.init`: the number of lambdas considered in the first iteration. 10 is the default.
+- `nlams.delta`: the length of extended lambdas down the sequence when there are few left in the current sequence (remember we don't fit all lambdas every iteration, only extend when most of the current ones have been completed and validated). 5 is the default.
 
 ```{r}
 library(snpnet)
 ```
 
-
 ```{r}
 genotype.dir <- paste0(system.file("extdata", package = "snpnet"), "/")
 phenotype.file <- system.file("extdata", "sample_phe.phe", package = "snpnet")
 
-configs <- list(
-  bufferSize = 100
-)
+configs_default <- list(
+  bufferSize = 200
+)  ## use all the other default settings
 
 # use glmnetPlus
-out <- snpnet(
+out_default <- snpnet(
   genotype.dir = genotype.dir,
   phenotype.file = phenotype.file,
   phenotype = "QPHE",
@@ -53,51 +79,18 @@ out <- snpnet(
   standardize.variant = FALSE,
   niter = 2,
   validation = FALSE,
-  configs = configs,
+  configs = configs_default,
   use.glmnetPlus = TRUE,
   verbose = FALSE,
   save = FALSE,
   glmnet.thresh = 1e-12
 )
-```
-
-The most important parameters in the core function `snpnet` include:
-
-- genotype.dir: the directory that contains genotype files. Assume at least the existence of train.bed/bim/fam, and val.bed/bim/fam if validation option is on. We assume that individuals that appear in train/val.bed/bim/fam should all appear also in the phenotype table. The individual ID in genotype files take the format `ID_ID` while the ID in the phenotype file takes the format `ID`.
-- phenotype.file: the path of the file that contains the phenotype values and can be read as a table.
-- phenotype: the name of the phenotype. Must be the same as the corresponding column name in the phenotype file.
-- covariates: a character vector containing the names of the covariates included in the lasso fitting, whose coefficients will not be penalized. The names must exist in the column names of the phenotype file.
-- results.dir: the path to the directory where meta and intermediate results are saved.
-- niter: the number of maximum iteration in the algorithm.
-- family: the type of the phenotype: "gaussian" or "binomial".
-- standardize.variant: a logical value indicating whether the variants are standardized in the lasso fitting. For SNP matrix, we may not want to standardize since the variants are already on the same scale.
-- nlambda: the number of lambda values on the solution path.
-- validation: a logical value indicating if performance is evaluated on the validation set. If so, `val.bed/bim/fam` should be available in `genotype.dir`.
-- save: a logical value whether to save intermediate results (e.g. in case of job failure and restart).
-
-Others include: 
-
-- num.snps.batch: the number of variants added to the strong set in each iteration. Default is 1000.
-- use.glmnetPlus: a logical value whether to use glmnet with warm start, if the glmnetPlus package is available. Currently only "gaussian" family is supported.
-- early.stopping: a logical value indicating whether early stopping based on validation metric is desired. Default is `TRUE`.
-- stopping.lag: a parameter for the stopping criterion such that the procedure stops after this number of consecutive decreases in the validation performance. Default is 2.
-- KKT.verbose: a logical value indicating if details on KKT check should be printed.
-- prevIter: if non-zero, it indicates the last successful iteration in the procedure so that we can restart from there. niter should be no less than prevIter.
-                 
-If we want to recover results and continue the procedure from a previous job, we should have `save = TRUE` and specify in `prevIter` the index of the last successful iteration.
-
-
-```{r}
-genotype.dir <- paste0(system.file("extdata", package = "snpnet"), "/")
-phenotype.file <- system.file("extdata", "sample_phe.phe", package = "snpnet")
 
 configs <- list(
   missing.rate = 0.1,
   MAF.thresh = 0.001,
-  nCores = 2,
-  bufferSize = 100,
-  chunkSize = 100,
-  meta.dir = "meta/",
+  nCores = 1,
+  bufferSize = 200,
   nlams.init = 10,
   nlams.delta = 5
 )
@@ -118,6 +111,13 @@ out <- snpnet(
   save = FALSE,
   glmnet.thresh = 1e-12
 )
+```
+
+They are identical.
+```{r}
+out_default$configs <- out_default$configs[order(names(out_default$configs))]
+out$configs <- out$configs[order(names(out$configs))]
+identical(out_default, out)
 ```
 
 

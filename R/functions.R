@@ -200,7 +200,7 @@ setup_configs_directories <- function(configs, covariates, standardize.variant, 
   default_settings <- c(missing.rate = 0.1, MAF.thresh = 0.001, nCores = 1,
                         nlams.init = 10, nlams.delta = 5)
   for (name in names(default_settings)) {
-    if (!(name %in% names(configs))) configs[[name]] <- default_settings[name]
+    if (!(name %in% names(configs))) configs[[name]] <- as.numeric(default_settings[name])
   }
   if (!("bufferSize" %in% names(configs)))
     stop("bufferSize should be provided to guide the memory capacity.")
