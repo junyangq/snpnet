@@ -106,14 +106,67 @@ show <- function(object) {
   cat("BEDMatrixPlus: ", n, " x ", p, " [", object@path, "]\n", sep = "")
 }
 
-#' @aliases BEDMatrix-class
+#' A Class to Extract Genotypes from a PLINK .bed File.
+#'
+#' `BEDMatrixPlus` is a class that maps a [PLINK
+#' .bed](https://www.cog-genomics.org/plink2/formats#bed) file into memory and
+#' behaves similarly to a regular `matrix` by implementing key methods such as
+#' `[`, `dim`, and `dimnames`. Subsets are extracted directly and on-demand
+#' from the .bed file without loading the entire file into memory.
+#'
+#' @slot xptr An external pointer to the underlying [Rcpp][Rcpp::Rcpp-package]
+#' code.
+#' @slot dims An integer vector specifying the number of samples and variants
+#' as determined by the the accompanying
+#' [.fam](https://www.cog-genomics.org/plink2/formats#fam) and
+#' [.bim](https://www.cog-genomics.org/plink2/formats#bim) files or by the `n`
+#' and `p` parameters of the [constructor function][initialize,BEDMatrixPlus-method()].
+#' @slot dnames A list describing the row names and column names of the object
+#' as determined by the accompanying
+#' [.fam](https://www.cog-genomics.org/plink2/formats#fam) and
+#' [.bim](https://www.cog-genomics.org/plink2/formats#bim) files, or `NULL` if
+#' the `n` and `p` parameters of the [constructor
+#' function][initialize,BEDMatrixPlus-method()] were provided.
+#' @slot path A character string containing the path to the .bed file.
+#' @importFrom methods new
+#' @aliases BEDMatrixPlus-class
 #' @export BEDMatrixPlus
 #' @exportClass BEDMatrixPlus
 BEDMatrixPlus <- setClass("BEDMatrixPlus", slots = c(xptr = "externalptr", dims = "integer", dnames = "list", path = "character"))
 
+
+#' Create a BEDMatrixPlus Object from a PLINK .bed File.
+#'
+#' This function constructs a new [BEDMatrixPlus-class] object by mapping the
+#' specified [PLINK .bed](https://www.cog-genomics.org/plink2/formats#bed) file
+#' into memory.
+#'
+#' @param .Object Internal, used by [methods::initialize()] generic.
+#' @param path Path to the
+#' [.bed](https://www.cog-genomics.org/plink2/formats#bed) file (with or
+#' without extension).
+#' @param n The number of samples. If `NULL` (the default), this number will be
+#' determined from the accompanying
+#' [.fam](https://www.cog-genomics.org/plink2/formats#fam) file (of the same
+#' name as the [.bed](https://www.cog-genomics.org/plink2/formats#bed) file).
+#' If a positive integer, the .fam file is not read and `rownames` will be set
+#' to `NULL` and have to be provided manually.
+#' @param p The number of variants. If `NULL` (the default) the number of
+#' variants will be determined from the accompanying
+#' [.bim](https://www.cog-genomics.org/plink2/formats#bim) file (of the same
+#' name as the [.bed](https://www.cog-genomics.org/plink2/formats#bed) file).
+#' If a positive integer, the .bim file is not read and `colnames` will be set
+#' to `NULL` and have to be provided manually.
+#' @return A [BEDMatrixPlus-class] object.
+#'
 #' @export
 setMethod("initialize", signature(.Object = "BEDMatrixPlus"), initialize)
 
+#' Show a BEDMatrixPlus Object.
+#'
+#' Display the object, by printing, plotting or whatever suits its class.
+#'
+#' @param object A [BEDMatrixPlus-class] object.
 #' @export
 setMethod("show", signature(object = "BEDMatrixPlus"), show)
 
@@ -160,8 +213,7 @@ chunkedApply_missing <- function(X, residuals, missing = NULL, bufferSize = 5000
   } else {
     nBuffers <- ceiling(dimX[2] / bufferSize)
   }
-  bufferRanges <- LinkedMatrix:::chunkRanges(dimX[2], nBuffers)
-  # browser()
+  bufferRanges <- chunkRanges(dimX[2], nBuffers)
   res <- lapply(seq_len(nBuffers), function(whichBuffer) {
     if (verbose) {
       message("Buffer ", whichBuffer, " of ", nBuffers, " ...")
@@ -170,7 +222,8 @@ chunkedApply_missing <- function(X, residuals, missing = NULL, bufferSize = 5000
       multiply_residuals(X, path, bufferRanges[1L, whichBuffer], bufferRanges[2L, whichBuffer], missing, residuals)
     } else {
       bufferIndex <- bufferRanges[, whichBuffer]
-      taskIndex <- LinkedMatrix:::chunkRanges(bufferIndex[2]-bufferIndex[1]+1, nTasks) + bufferIndex[1] - 1
+
+      taskIndex <- chunkRanges(bufferIndex[2]-bufferIndex[1]+1, nTasks) + bufferIndex[1] - 1
       res <- parallel::mclapply(X = seq_len(nTasks), FUN = function(whichTask, ...) {
         # taskIndex <- bufferIndex[cut(bufferIndex, breaks = nTasks, labels = FALSE) == whichTask]
         multiply_residuals(X, path, taskIndex[1, whichTask], taskIndex[2, whichTask], missing, residuals)
@@ -179,6 +232,18 @@ chunkedApply_missing <- function(X, residuals, missing = NULL, bufferSize = 5000
     }
   })
   simplifyList_Col(res)
+}
+
+chunkRanges <- function(a, n) {
+  if (n > a) {
+    stop(paste("Cannot split", a, "into", n, "chunks. Reduce the number of chunks."))
+  }
+  k <- as.integer(a / n)
+  r <- as.integer(a %% n)
+  range <- function(i, k, r) {
+    c((i - 1L) * k + min(i - 1L, r) + 1L, i * k + min(i, r))
+  }
+  sapply(seq_len(n), range, k, r)
 }
 
 multiply_residuals <- function(x, ...) {

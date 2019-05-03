@@ -16,6 +16,7 @@ compute.summary.stats <- function(chr, subset, FUN, file.path, save = FALSE, chu
   sum.stats
 }
 
+#' @importFrom data.table set as.data.table
 prepareFeatures <- function(chr, names, stat, subset) {
   features.add <- chr[, names, drop=FALSE]
   features.add <- as.data.table(features.add[subset, ])
@@ -25,10 +26,10 @@ prepareFeatures <- function(chr, names, stat, subset) {
   features.add
 }
 
-computeLambdas <- function(score, configs) {
+computeLambdas <- function(score, nlambda, lambda.min.ratio) {
   lambda.max <- max(score, na.rm = T)
-  lambda.min <- lambda.max * configs[["lambda.min.ratio"]]
-  full.lams <- exp(seq(from = log(lambda.max), to = log(lambda.min), length.out = configs[["nlambda"]]))
+  lambda.min <- lambda.max * lambda.min.ratio
+  full.lams <- exp(seq(from = log(lambda.max), to = log(lambda.min), length.out = nlambda))
   full.lams
 }
 
@@ -193,12 +194,20 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
   use.glmnetPlus
 }
 
-setup_configs_directories <- function(configs, covariates, standardize.variant, nlambda, early.stopping,
+setup_configs_directories <- function(configs, covariates, standardize.variant, early.stopping,
                                       stopping.lag, save, results.dir) {
   configs[["covariates"]] <- covariates
   configs[["standardize.variant"]] <- standardize.variant
-  configs[["nlambda"]] <- nlambda
   configs[["early.stopping"]] <- ifelse(early.stopping, stopping.lag, -1)
+  default_settings <- c(missing.rate = 0.1, MAF.thresh = 0.001, nCores = 1,
+                        nlams.init = 10, nlams.delta = 5)
+  for (name in names(default_settings)) {
+    if (!(name %in% names(configs))) configs[[name]] <- default_settings[name]
+  }
+  if (!("bufferSize" %in% names(configs)))
+    stop("bufferSize should be provided to guide the memory capacity.")
+  if (!("chunkSize" %in% names(configs)))
+    configs[["chunkSize"]] <- configs[["bufferSize"]] / configs[["nCores"]]
   if (save) {
     if (is.null(configs[["meta.dir"]])) configs[["meta.dir"]] <- "meta/"
     if (is.null(configs[["results.dir"]])) configs[["results.dir"]] <- "results/"

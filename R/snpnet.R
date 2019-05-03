@@ -6,13 +6,14 @@
 #' @param genotype.dir the directory that contains genotype files. Assume at least the existence of
 #'                     train.bed/bim/fam, and val.bed/bim/fam if validation option is on.
 #' @param phenotype.file the path of the file that contains the phenotype values and can be read as
-#'                       as a table.
+#'                       as a table. There should be an ID column containing a unique identifier for
+#'                       each individual, (optional) some covariate columns and phenotype columns.
 #' @param phenotype the name of the phenotype. Must be the same as the corresponding column name in
 #'                  the phenotype file.
 #' @param results.dir the path to the directory where meta and intermediate results are saved.
-#' @param niter the number of maximum iteration in the algorithm
+#' @param niter the number of maximum iteration in the algorithm.
 #' @param family the type of the phenotype: "gaussian" or "binomial". If not provided or NULL, it will be
-#'               detected based on the number of levels in the response
+#'               detected based on the number of levels in the response.
 #' @param standardize.variant a logical value indicating whether the variants are standardized in
 #'                            the lasso fitting. Default is FALSE. For SNP matrix, we may not want
 #'                            to standardize since the variants are already on the same scale.
@@ -25,24 +26,49 @@
 #'                   fitting, whose coefficients will not be penalized. The names must exist in the
 #'                   column names of the phenotype file.
 #' @param num.snps.batch the number of variants added to the strong set in each iteration. Default is 1000.
-#' @param glmnet.thresh the convergence threshold used in glmnet/glmnetPlus
-#' @param configs a list of other config parameters
-#' @param verbose a logical value indicating if more detailed messages should be printed
-#' @param save a logical value whether to save intermediate results (e.g. in case of job failure and restart)
+#' @param glmnet.thresh the convergence threshold used in glmnet/glmnetPlus.
+#' @param configs a list of other config parameters. \code{bufferSize} must be provided.
+#'                \describe{
+#'                 \item{missing.rate}{variants are excluded if the missing rate exceeds this level. Default is 0.05.}
+#'                 \item{MAF.thresh}{variants are excluded if the minor allele frequency (MAF) is lower
+#'                                than this level. Default is 0.001.}
+#'                 \item{nCores}{the number of cores used for computation. You may use the maximum number
+#'                            of cores available on the computer. Default is 1, single core.}
+#'                 \item{\strong{bufferSize}}{the maximum number of SNP columns we want to load at a time subject
+#'                                to memory bound (used in KKT check). For example, a dataset of 200K
+#'                                * 10K takes around 15 Gbs of memory.}
+#'                 \item{chunkSize}{the maximum number of SNP columns to be loaded for each core. chunkSize
+#'                               * nCores should be less than memory.}
+#'                 \item{meta.dir}{the relative path to the subdirectory used to store the computed
+#'                              summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`).
+#'                              Needed when `save = T` specified in the main function. Default is `"meta.dir/`.}
+#'                 \item{results.dir}{the relative path to the subdirectory used to store the intermediate
+#'                                 results so that we may look into or recover from later.
+#'                                 Needed when `save = T` specified in the main function. Default is `"results.dir/`.}
+#'                 \item{nlams.init}{the number of lambdas considered in the first iteration.
+#'                                Default 10 is a reasonable number to start with.}
+#'                 \item{nlams.delta}{the length of extended lambdas down the sequence when there are few
+#'                                 left in the current sequence (remember we don't fit all lambdas
+#'                                 every iteration, only extend when most of the current ones have been completed and validated). Default is 5.}
+#'                }
+#' @param verbose a logical value indicating if more detailed messages should be printed.
+#' @param save a logical value whether to save intermediate results (e.g. in case of job failure and restart).
 #' @param use.glmnetPlus a logical value whether to use glmnet with warm start, if the glmnetPlus
-#'                       package is available. Currently only "gaussian" family is supported
+#'                       package is available. Currently only "gaussian" family is supported.
 #' @param early.stopping a logical value indicating whether early stopping based on validation
-#'                       metric is desired
+#'                       metric is desired.
 #' @param stopping.lag a parameter for the stopping criterion such that the procedure stops after
-#'                     this number of consecutive decreases in the validation metric
-#' @param KKT.verbose a logical value indicating if details on KKT check should be printed
+#'                     this number of consecutive decreases in the validation metric.
+#' @param KKT.verbose a logical value indicating if details on KKT check should be printed.
 #' @param prevIter if non-zero, it indicates the last successful iteration in the procedure so that
 #'                 we can restart from there. niter should be no less than prevIter.
 #' @param increase.size the increase in batch size if the KKT condition fails often in recent iterations.
 #' @param buffer.verbose a logical value indicating if progress is printed when computing inner product
-#'                       with the memory-mapped SNP matrix
+#'                       with the memory-mapped SNP matrix.
 #'
-#' @return a list containing the solution path, the metric evaluated on training/validation set and others.
+#' @return A list containing the solution path, the metric evaluated on training/validation set and others.
+#'
+#' @importFrom data.table ':='
 #'
 #' @useDynLib snpnet, .registration=TRUE
 #' @export
@@ -55,7 +81,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
                    buffer.verbose = FALSE) {
 
   if (prevIter >= niter) stop("prevIter is greater or equal to the total number of iterations.")
-  configs <- setup_configs_directories(configs, covariates, standardize.variant, nlambda, early.stopping,
+  configs <- setup_configs_directories(configs, covariates, standardize.variant, early.stopping,
                            stopping.lag, save, results.dir)
 
   start.time.tot <- Sys.time()
@@ -63,7 +89,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
   ### --- Process phenotypes --- ###
   cat("Preprocessing start:", as.character(Sys.time()), "\n")
-  phe.master <- fread(phenotype.file)
+  phe.master <- data.table::fread(phenotype.file)
   phe.master$ID <- as.character(phe.master$ID)
   rownames(phe.master) <- phe.master$ID
   if (is.null(family)) {
@@ -102,7 +128,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
   check.missing <- ids.chr.train[!(ids.chr.train %in% phe.master$ID)]
   if (validation) check.missing <- c(check.missing, ids.chr.val[!(ids.chr.val %in% phe.master$ID)])
   if (length(check.missing) > 0) {
-    stop(paste0("Missing phenotype entry (", phenotype, ") for: ", head(check.missing, 5), " ...\n"))
+    stop(paste0("Missing phenotype entry (", phenotype, ") for: ", utils::head(check.missing, 5), " ...\n"))
   }
 
   ### --- Prepare the feature matrix --- ###
@@ -138,9 +164,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
 
   if (prevIter == 0) {
     cat("Iteration 0. Now time:", as.character(Sys.time()), "\n")
-    form <- as.formula(paste(phenotype, "~ ", paste(c(1, covariates), collapse = " + ")))
-    glmmod <- glm(form, data = phe.train, family = family, subset = rowIdx.subset.train)
-    residual.full <- matrix(residuals(glmmod, type = "response"), ncol = 1)
+    form <- stats::as.formula(paste(phenotype, "~ ", paste(c(1, covariates), collapse = " + ")))
+    glmmod <- stats::glm(form, data = phe.train, family = family, subset = rowIdx.subset.train)
+    residual.full <- matrix(stats::residuals(glmmod, type = "response"), ncol = 1)
     rownames(residual.full) <- ids.chr.train[rowIdx.subset.train]
 
     if (verbose) cat("  Start computing inner product for initialization ...\n")
@@ -153,8 +179,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (is.null(lambda.min.ratio)) {
       lambda.min.ratio <- ifelse(n.subset.train < ncol(chr.train)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)
     }
-    configs[["lambda.min.ratio"]] <- lambda.min.ratio
-    full.lams <- computeLambdas(score, configs)
+    full.lams <- computeLambdas(score, nlambda, lambda.min.ratio, configs)
 
     lambda.idx <- 1
     num.lams <- configs[["nlams.init"]]
@@ -198,8 +223,8 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     start.iter.time <- Sys.time()
 
     num.lams <- min(num.lams + ifelse(lambda.idx >= num.lams-configs[["nlams.delta"]]/2, configs[["nlams.delta"]], 0),
-                    configs[["nlambda"]])   ## extend lambda list if necessary
-    num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(tail(num.new.valid, 3), 1))))
+                    nlambda)   ## extend lambda list if necessary
+    num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(utils::tail(num.new.valid, 3), 1))))
 
     ### --- Update the feature matrix --- ###
     if (verbose) cat("  Start updating feature matrix ...\n")
@@ -270,7 +295,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
       residual.full <- glmfit$residuals
       pred.train <- response.train - residual.full
     } else {
-      pred.train <- predict(glmfit, newx = features.train.matrix, type = "response")
+      pred.train <- stats::predict(glmfit, newx = features.train.matrix, type = "response")
       residual.full <- response.train - pred.train
       rm(features.train.matrix) # save memory
     }
@@ -305,7 +330,11 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
         print("Time of convertion to validation matrix")
         print(Sys.time() - start_val_mat_time)
         start_pred_val_time <- Sys.time()
-        pred.val <- predict(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+        if (use.glmnetPlus) {
+          pred.val <- glmnetPlus::predict(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+        } else {
+          pred.val <- glmnet::predict(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+        }
         metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response.val, family)
         print("Time of prediction on validation matrix")
         print(Sys.time() - start_pred_val_time)
@@ -345,7 +374,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     cat("Elapsed time since start: ", time_diff(start.time.tot, end.iter.time), ".\n\n", sep = "")
 
     ### --- Check stopping criteria --- ####
-    if (max.valid.idx == configs[["nlambda"]]) break
+    if (max.valid.idx == nlambda) break
     if (early.stopping && validation && max.valid.idx > 2 && all(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-stopping.lag)]))) {
       cat("Early stopped at iteration ", iter, " with validation metric: ", max(metric.val, na.rm = T), ".\n", sep = "")
       cat("Previous ones: ", paste(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx], collapse = ", "), ".\n", sep = "")
