@@ -37,8 +37,6 @@
 #'                 \item{\strong{bufferSize}}{the maximum number of SNP columns we want to load at a time subject
 #'                                to memory bound (used in KKT check). For example, a dataset of 200K
 #'                                * 10K takes around 15 Gbs of memory.}
-#'                 \item{chunkSize}{the maximum number of SNP columns to be loaded for each core. chunkSize
-#'                               * nCores should be less than memory.}
 #'                 \item{meta.dir}{the relative path to the subdirectory used to store the computed
 #'                              summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`).
 #'                              Needed when `save = T` specified in the main function. Default is `"meta.dir/`.}
@@ -386,6 +384,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
   cat("End snpnet:", as.character(end.time.tot), "\n")
   cat("Total time elapsed:", end.time.tot-start.time.tot, units(end.time.tot-start.time.tot), "\n")
 
-  out <- list(metric.train, metric.val, glmnet.results, full.lams, a0, beta, configs)
+  out <- list(metric.train = metric.train, metric.val = metric.val, glmnet.results = glmnet.results,
+              full.lams = full.lams, a0 = a0, beta = beta, configs = configs)
   out
 }
