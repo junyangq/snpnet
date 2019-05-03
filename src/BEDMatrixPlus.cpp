@@ -55,7 +55,6 @@ BEDMatrixPlus::BEDMatrixPlus(std::string path, std::size_t n, std::size_t p) : n
     const std::size_t num_bytes = this->file_region.get_size();
     // Check if given dimensions match the file
 
-    // ADDDDDDD
     if ((this->nrow * this->ncol) + (this->byte_padding * this->ncol) != (num_bytes - this->length_header) * 4) {
         throw std::runtime_error("n or p does not match the dimensions of the file.");
     }
@@ -67,9 +66,6 @@ Rcpp::NumericMatrix BEDMatrixPlus::multiply_residuals(Rcpp::IntegerVector js, Rc
     if (Rcpp::is_true(Rcpp::any(js > this->ncol)) || Rcpp::is_true(Rcpp::any(je > this->ncol))) {
         throw std::runtime_error("subscript out of bounds");
     }
-
-    // Rcpp::IntegerVector i0(i - 1);
-    // Rcpp::IntegerVector j0(j - 1);
     
     std::size_t js0 = js[0] - 1;
     std::size_t je0 = je[0] - 1;
@@ -82,7 +78,6 @@ Rcpp::NumericMatrix BEDMatrixPlus::multiply_residuals(Rcpp::IntegerVector js, Rc
     for (std::size_t idx_j = js0; idx_j <= je0; idx_j++) {
 
         double summation[size_k][4];
-        // double doubleType;
         std::memset(*summation, 0, size_k * 4 * sizeof(double));
 
         std::size_t base_pos = (idx_j * this->nrow) + (this->byte_padding * idx_j);
@@ -94,19 +89,7 @@ Rcpp::NumericMatrix BEDMatrixPlus::multiply_residuals(Rcpp::IntegerVector js, Rc
         genotypes >>= (which_genotype * 2);
 
         for (std::size_t idx_i = 0; idx_i < size_i; idx_i++) {
-
-            // std::size_t which_byte = which_pos / 4;
-                // Find genotype in byte
-            // unsigned short int which_genotype = (which_pos % 4) * 2;
-                // Read in the whole byte
-            // char genotypes = this->file_data[which_byte + this->length_header];
-                // Remove the other genotypes by shifting the genotype of interest
-                // to the end of the byte and masking with 00000011
             uint8_t genotype = genotypes & 3;
-                // Remap genotype value to resemble RAW file, i.e. 0 indicates homozygous
-                // major allele, 1 indicates heterozygous, and 2 indicates homozygous minor
-                // allele. In BED, the coding is different: homozygous minor allele is 0
-                // (00) and homozygous major allele is 3 (11). Each byte is read backwards.
             if (genotype != 3) {
                 for (std::size_t idx_k = 0; idx_k < size_k; idx_k++) {
                     summation[idx_k][genotype] += residuals(idx_i, idx_k);
