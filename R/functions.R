@@ -106,8 +106,6 @@ KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stat
   }
   num.violates <- apply(abs(prod.full[weak.vars, , drop = FALSE]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
 
-  # print(data.frame(lambda = current.lams, violations = num.violates))
-
   idx.violation <- which((num.violates != 0) & ((1:num.lams) >= prev.lambda.idx))
   next.lambda.idx <- ifelse(length(idx.violation) == 0, num.lams+1, min(idx.violation))
   max.valid.idx <- next.lambda.idx - 1  # num.lams >= 1

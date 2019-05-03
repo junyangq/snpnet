@@ -1,9 +1,12 @@
 Package: snpnet
+Version: 0.1.0
 Type: Package
 Title: snpnet: Efficient Lasso Solver for Large SNP Data
-Version: 0.1.0
-Author: Junyang Qian and Trevor Hastie
-Maintainer: Junyang Qian <junyangq@stanford.edu>
+Authors@R: c(
+    person("Junyang", "Qian", email = "junyangq@stanford.edu", role = c("aut", "cre")),
+    person("Trevor", "Hastie", email = "hastie@stanford.edu", role = c("aut")),
+    person("Yosuke", "Tanigawa", email = "ytanigaw@stanford.edu", role = c("ctb"))
+    )
 Description: Fitting the entire lasso solution path on large-scale genotype-phenotype data.
 License: GPL-2
 Encoding: UTF-8

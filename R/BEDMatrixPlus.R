@@ -225,7 +225,6 @@ chunkedApply_missing <- function(X, residuals, missing = NULL, bufferSize = 5000
 
       taskIndex <- chunkRanges(bufferIndex[2]-bufferIndex[1]+1, nTasks) + bufferIndex[1] - 1
       res <- parallel::mclapply(X = seq_len(nTasks), FUN = function(whichTask, ...) {
-        # taskIndex <- bufferIndex[cut(bufferIndex, breaks = nTasks, labels = FALSE) == whichTask]
         multiply_residuals(X, path, taskIndex[1, whichTask], taskIndex[2, whichTask], missing, residuals)
       }, ..., mc.preschedule = FALSE, mc.cores = nCores)
       simplifyList_Col(res)

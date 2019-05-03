@@ -63,6 +63,7 @@
 #' @param prevIter if non-zero, it indicates the last successful iteration in the procedure so that
 #'                 we can restart from there. niter should be no less than prevIter.
 #' @param increase.size the increase in batch size if the KKT condition fails often in recent iterations.
+#'                      Default is half of the batch size.
 #' @param buffer.verbose a logical value indicating if progress is printed when computing inner product
 #'                       with the memory-mapped SNP matrix.
 #'
@@ -72,13 +73,12 @@
 #'
 #' @useDynLib snpnet, .registration=TRUE
 #' @export
-snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, niter = 10,
+snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.dir = NULL,
                    family = NULL, standardize.variant = FALSE, nlambda = 100, lambda.min.ratio = NULL,
-                   validation = FALSE, covariates = c("age", "sex", paste0("PC", 1:10)),
-                   num.snps.batch = 1000, glmnet.thresh = 1E-7, configs, verbose = TRUE,
-                   save = FALSE, use.glmnetPlus = (family == "gaussian"), early.stopping = TRUE,
-                   stopping.lag = 2, KKT.verbose = FALSE, prevIter = 0, increase.size = 500,
-                   buffer.verbose = FALSE) {
+                   niter = 10, num.snps.batch = 1000, save = FALSE, configs, prevIter = 0,
+                   validation = FALSE, early.stopping = TRUE, glmnet.thresh = 1E-7,
+                   use.glmnetPlus = (family == "gaussian"), stopping.lag = 2, increase.size = num.snps.batch/2,
+                   verbose = FALSE, KKT.verbose = FALSE, buffer.verbose = FALSE) {
 
   if (prevIter >= niter) stop("prevIter is greater or equal to the total number of iterations.")
   configs <- setup_configs_directories(configs, covariates, standardize.variant, early.stopping,
@@ -179,7 +179,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, results.dir = NULL, 
     if (is.null(lambda.min.ratio)) {
       lambda.min.ratio <- ifelse(n.subset.train < ncol(chr.train)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)
     }
-    full.lams <- computeLambdas(score, nlambda, lambda.min.ratio, configs)
+    full.lams <- computeLambdas(score, nlambda, lambda.min.ratio)
 
     lambda.idx <- 1
     num.lams <- configs[["nlams.init"]]
