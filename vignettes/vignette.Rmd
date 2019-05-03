@@ -24,23 +24,39 @@ A config list should be specified to include some meta configurations such as
 - `MAF.thresh`: variants are excluded if the minor allele frequency (MAF) exceeds this level
 - `nCores`: the number of cores used for computation. You may use the maximum number of cores available on the computer
 - `bufferSize`: the maximum number of SNP columns we want to load at a time subject to memory bound (used in KKT check). For example, a dataset of 200K $\times$ 10K takes around 15 Gbs of memory
+- `chunkSize`: ...
 - `meta.dir`: the relative path to the subdirectory used to store the computed summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`). Needed when `save = T` specified in the main function. Default is `"meta.dir/`
 - `results.dir`: the relative path to the subdirectory used to store the intermediate results so that we may look into or recover from later. Needed when `save = T` specified in the main function. Default is `"results.dir/`
 - `nlams.init`: the number of lambdas considered in the first iteration. 10 is a reasonable number to start with
 - `nlams.delta`: the length of extended lambdas down the sequence when there are few left in the current sequence (remember we don't fit all lambdas every iteration, only extend when most of the current ones have been completed and validated). 2-5 should be reasonable numbers
 
 ```{r}
-# library(BEDMatrix)
 library(snpnet)
+```
+
+
+```{r}
+genotype.dir <- paste0(system.file("extdata", package = "snpnet"), "/")
+phenotype.file <- system.file("extdata", "sample_phe.phe", package = "snpnet")
 
 configs <- list(
-  missing.rate = 0.1,
-  MAF.thresh = 0.001,
-  nCores = 2,
-  bufferSize = 100,
-  meta.dir = "meta/",
-  nlams.init = 10,
-  nlams.delta = 5
+  bufferSize = 100
+)
+
+# use glmnetPlus
+out <- snpnet(
+  genotype.dir = genotype.dir,
+  phenotype.file = phenotype.file,
+  phenotype = "QPHE",
+  family = "gaussian",
+  standardize.variant = FALSE,
+  niter = 2,
+  validation = FALSE,
+  configs = configs,
+  use.glmnetPlus = TRUE,
+  verbose = FALSE,
+  save = FALSE,
+  glmnet.thresh = 1e-12
 )
 ```
 
@@ -74,6 +90,17 @@ If we want to recover results and continue the procedure from a previous job, we
 genotype.dir <- paste0(system.file("extdata", package = "snpnet"), "/")
 phenotype.file <- system.file("extdata", "sample_phe.phe", package = "snpnet")
 
+configs <- list(
+  missing.rate = 0.1,
+  MAF.thresh = 0.001,
+  nCores = 2,
+  bufferSize = 100,
+  chunkSize = 100,
+  meta.dir = "meta/",
+  nlams.init = 10,
+  nlams.delta = 5
+)
+
 # use glmnetPlus
 out <- snpnet(
   genotype.dir = genotype.dir,
@@ -90,6 +117,8 @@ out <- snpnet(
   glmnet.thresh = 1e-12
 )
 ```
+
+
 
 We can then take a look at the coefficients and the metric.
 ```{r}
