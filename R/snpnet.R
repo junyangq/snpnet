@@ -87,9 +87,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
 
   ### --- Process phenotypes --- ###
   cat("Preprocessing start:", as.character(Sys.time()), "\n")
-  phe.master <- data.table::fread(phenotype.file)
-  phe.master$ID <- as.character(phe.master$ID)
-  rownames(phe.master) <- phe.master$ID
+  phe.master <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = c("FID", "IID", covariates, phenotype))
+  cat_ids <- paste(phe.master$FID, phe.master$IID, sep = "_")
+  # rownames(phe.master) <- phe.master$ID
   if (is.null(family)) {
     if (all(unique(phe.master[[phenotype]] %in% c(0, 1, 2, -9)))) {
       family <- "binomial"
@@ -114,27 +114,27 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
   ### --- Process genotypes --- ###
   chr.train <- BEDMatrixPlus(file.path(genotype.dir, "train.bed"))
   n.chr.train <- nrow(chr.train)
-  ids.chr.train <- sapply(strsplit(rownames(chr.train), split = "_"), function(x) x[[1]])
+  ids.chr.train <- rownames(chr.train)
 
   if (validation) {
     chr.val <- BEDMatrixPlus(file.path(genotype.dir, "val.bed"))
     n.chr.val <- nrow(chr.val)
-    ids.chr.val <- sapply(strsplit(rownames(chr.val), split = "_"), function(x) x[[1]])
+    ids.chr.val <- rownames(chr.val)
   }
 
   # asssume IDs in the genotype matrix must exist in the phenotype matrix, and stop if not #
-  check.missing <- ids.chr.train[!(ids.chr.train %in% phe.master$ID)]
-  if (validation) check.missing <- c(check.missing, ids.chr.val[!(ids.chr.val %in% phe.master$ID)])
+  check.missing <- ids.chr.train[!(ids.chr.train %in% cat_ids)]
+  if (validation) check.missing <- c(check.missing, ids.chr.val[!(ids.chr.val %in% cat_ids)])
   if (length(check.missing) > 0) {
     stop(paste0("Missing phenotype entry (", phenotype, ") for: ", utils::head(check.missing, 5), " ...\n"))
   }
 
   ### --- Prepare the feature matrix --- ###
-  rowIdx.subset.train <- which(ids.chr.train %in% phe.master$ID[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
+  rowIdx.subset.train <- which(ids.chr.train %in% cat_ids[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
   n.subset.train <- length(rowIdx.subset.train)
   stats <- computeStats(chr.train, rowIdx.subset.train, stat = c("pnas", "means", "sds"),
                         path = file.path(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose, buffer.verbose = buffer.verbose)
-  phe.train <- phe.master[match(ids.chr.train, phe.master$ID), ]
+  phe.train <- phe.master[match(ids.chr.train, cat_ids), ]
   if (length(covariates) > 0) {
     features.train <- phe.train[, covariates, with = F]
     features.train <- features.train[rowIdx.subset.train, ]
@@ -142,9 +142,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
     features.train <- NULL
   }
   if (validation) {
-    rowIdx.subset.val <- which(ids.chr.val %in% phe.master$ID[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
+    rowIdx.subset.val <- which(ids.chr.val %in% cat_ids[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
     n.subset.val <- length(rowIdx.subset.val)
-    phe.val <- phe.master[match(ids.chr.val, phe.master$ID), ]
+    phe.val <- phe.master[match(ids.chr.val, cat_ids), ]
     if (length(covariates) > 0) {
       features.val <- phe.val[, covariates, with = F]
       features.val <- features.val[rowIdx.subset.val, ]
