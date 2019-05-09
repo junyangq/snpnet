@@ -329,9 +329,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
         print(Sys.time() - start_val_mat_time)
         start_pred_val_time <- Sys.time()
         if (use.glmnetPlus) {
-          pred.val <- glmnetPlus::predict(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+          pred.val <- glmnetPlus::predict.glmnet(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         } else {
-          pred.val <- glmnet::predict(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+          pred.val <- glmnet::predict.glmnet(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         }
         metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response.val, family)
         print("Time of prediction on validation matrix")
