@@ -20,7 +20,7 @@ Snpnet is a package that is used to fit the lasso on big genomics data. We assum
 
 The most important parameters in the core function `snpnet` include:
 
-- `genotype.dir`: the directory that contains genotype files. Assume at least the existence of train.bed/bim/fam, and val.bed/bim/fam if validation option is on. We assume that individuals that appear in train/val.bed/bim/fam should all appear also in the phenotype table. The individual ID in genotype files take the format `ID_ID` while the ID in the phenotype file takes the format `ID`.
+- `genotype.dir`: the directory that contains genotype files. Assume at least the existence of train.bed/bim/fam, and val.bed/bim/fam if validation option is on. We assume that individuals that appear in train/val.bed/bim/fam should all appear also in the phenotype table. The individual ID in genotype files take the format `FID_IID` while the IDs in the phenotype file takes the format `FID` and `IID`.
 - `phenotype.file`: the path of the file that contains the phenotype values and can be read as a table.
 - `phenotype`: the name of the phenotype. Must be the same as the corresponding column name in the phenotype file.
 - `covariates`: a character vector containing the names of the covariates included in the lasso fitting, whose coefficients will not be penalized. The names must exist in the column names of the phenotype file.
