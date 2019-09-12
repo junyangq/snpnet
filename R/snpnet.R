@@ -97,7 +97,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
       family <- "gaussian"
     }
   }
-  if (family == "binomial") phe.master[[phenotype]] <- phe.master[[phenotype]] - 1
+  if (family == "binomial") phe.master[[phenotype]] <- tidyr::replace_na(dplyr::na_if(phe.master[[phenotype]], -9) - 1, -9)
 
   ### --- Check whether to use glmnet or glmnetPlus --- ###
   use.glmnetPlus <- checkGlmnetPlus(use.glmnetPlus, family)
