@@ -1,5 +1,5 @@
 compute.summary.stats <- function(chr, subset, FUN, file.path, save = FALSE, chunkSize, nCores, verbose = FALSE, buffer.verbose = FALSE, stat.name, recompute = FALSE) {
-  if (save && file.exists(file.path) && !recompute) {
+  if (file.exists(file.path) && !recompute) {
     if (verbose) cat(paste0("File ", file.path, " exists. Computation skipped.\n"))
     sum.stats <- readRDS(file.path)
   } else {
