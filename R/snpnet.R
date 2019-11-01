@@ -112,9 +112,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
   }
 
   ### --- Process genotypes --- ###
-  chr.train <- BEDMatrixPlus(file.path(genotype.dir, "train.bed"))
-#  n.chr.train <- nrow(chr.train)
-#  ids.chr.train <- rownames(chr.train)
   pvar.train <- pgenlibr::NewPvar(file.path(genotype.dir, 'train.pvar.zst'))
   pgen.train <- pgenlibr::NewPgen(file.path(genotype.dir, 'train.pgen'), pvar=pvar.train)    
   psam.train <- dplyr::mutate(dplyr::rename(data.table::fread(file.path(genotype.dir, 'train.psam')), 'FID'='#FID'), ID=paste(FID, IID, sep='_'))
@@ -124,16 +121,13 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
   vars.train <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0('zstdcat ', file.path(genotype.dir, 'train.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
 
   if (validation) {
-    chr.val <- BEDMatrixPlus(file.path(genotype.dir, "val.bed"))
-#    n.chr.val <- nrow(chr.val)
-#    ids.chr.val <- rownames(chr.val)
     pvar.val <- pgenlibr::NewPvar(file.path(genotype.dir, 'val.pvar.zst'))
     pgen.val <- pgenlibr::NewPgen(file.path(genotype.dir, 'val.pgen'), pvar=pvar.val)
     psam.val <- dplyr::mutate(dplyr::rename(data.table::fread(file.path(genotype.dir, 'val.psam')), 'FID'='#FID'), ID=paste(FID, IID, sep='_'))
     n.chr.val <- nrow(psam.val)
     ids.chr.val <- dplyr::pull(dplyr::select(psam.val, ID))
 #    vars.val <- sapply(1:pgenlibr::GetVariantCt(pvar.val), function(i){pgenlibr::GetVariantId(pvar.val, i)})
-    vars.val <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0('zstdcat ', file.path(genotype.dir, 'train.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID      
+    vars.val <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0('zstdcat ', file.path(genotype.dir, 'val.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
   }
 
   # asssume IDs in the genotype matrix must exist in the phenotype matrix, and stop if not #
@@ -148,7 +142,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
   n.subset.train <- length(rowIdx.subset.train)
 #   stats <- computeStats(chr.train, rowIdx.subset.train, stat = c("pnas", "means", "sds"),
 #                         path = file.path(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose, buffer.verbose = buffer.verbose)
-  stats <- computeStats(chr.train, rowIdx.subset.train, genotype.dir, psam.train, stat = c("pnas", "means", "sds"),
+  stats <- computeStats(rowIdx.subset.train, genotype.dir, psam.train, stat = c("pnas", "means", "sds"),
                         path = file.path(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose, buffer.verbose = buffer.verbose)    
   phe.train <- phe.master[match(ids.chr.train, cat_ids), ]
   if (length(covariates) > 0) {
@@ -186,7 +180,6 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
     if (verbose) cat("  Start computing inner product for initialization ...\n")
     prod.init.start <- Sys.time()
     prod.full <- computeProduct(residual.full, pgen.train, vars.train, n.chr.train, rowIdx.subset.train, stats, configs, verbose = buffer.verbose, path = file.path(genotype.dir, "train.bed"))
-#    prod.full <- computeProduct(residual.full, pgen.train, rowIdx.subset.train, stats, configs, verbose = buffer.verbose, path = file.path(genotype.dir, "train.bed"))
     score <- abs(prod.full[, 1])
     prod.init.end <- Sys.time()
     if (verbose) cat("  End computing inner product for initialization. Elapsed time:", time_diff(prod.init.start, prod.init.end), "\n")
@@ -217,15 +210,15 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
     chr.to.keep <- setdiff(features.to.keep, covariates)
     load_start <- Sys.time()
     if (!is.null(features.train)) {
-      features.train[, (chr.to.keep) := prepareFeatures(chr.train, pgen.train, vars.train, chr.to.keep, stats, rowIdx.subset.train, debug_msg='prepF1')]
+      features.train[, (chr.to.keep) := prepareFeatures(pgen.train, vars.train, chr.to.keep, stats)]
     } else {
-      features.train <-  prepareFeatures(chr.train, pgen.train, vars.train, chr.to.keep, stats, rowIdx.subset.train, debug_msg='prepF2')
+      features.train <-  prepareFeatures(pgen.train, vars.train, chr.to.keep, stats)
     }
     if (validation) {
       if (!is.null(features.val)) {
-        features.val[, (chr.to.keep) := prepareFeatures(chr.val, pgen.val, vars.val, chr.to.keep, stats, rowIdx.subset.val, debug_msg='prepF3')]
+        features.val[, (chr.to.keep) := prepareFeatures(pgen.val, vars.val, chr.to.keep, stats)]
       } else {
-        features.val <- prepareFeatures(chr.val, pgen.val, vars.val, chr.to.keep, stats, rowIdx.subset.val, debug_msg='prepF4')
+        features.val <- prepareFeatures(pgen.val, vars.val, chr.to.keep, stats)
       }
     }
     load_end <- Sys.time()
@@ -257,7 +250,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
     sorted.score <- sort(score, decreasing = T, na.last = NA)
     if (length(sorted.score) > 0) {
       features.to.add <- names(sorted.score)[1:min(num.snps.batch, length(sorted.score))]
-      features.add.train <- prepareFeatures(chr.train, pgen.train, vars.train, features.to.add, stats, rowIdx.subset.train, verbose=T, debug_msg='prepF5')
+      features.add.train <- prepareFeatures(pgen.train, vars.train, features.to.add, stats)
       if (!is.null(features.train)) {
         features.train[, colnames(features.add.train) := features.add.train]
         rm(features.add.train)
@@ -265,7 +258,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
         features.train <- features.add.train
       }
       if (validation) {
-        features.add.val <- prepareFeatures(chr.val, pgen.val, vars.val, features.to.add, stats, rowIdx.subset.val, verbose=T, debug_msg='prepF6')
+        features.add.val <- prepareFeatures(pgen.val, vars.val, features.to.add, stats)
         if (!is.null(features.val)) {
           features.val[, colnames(features.add.val) := features.add.val]
           rm(features.add.val)
