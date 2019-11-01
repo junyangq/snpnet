@@ -113,27 +113,13 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
 
   ### --- Process genotypes --- ###
   chr.train <- BEDMatrixPlus(file.path(genotype.dir, "train.bed"))
-#  n.chr.train <- nrow(chr.train)
-#  ids.chr.train <- rownames(chr.train)
-  pvar.train <- pgenlibr::NewPvar(file.path(genotype.dir, 'train.pvar.zst'))
-  pgen.train <- pgenlibr::NewPgen(file.path(genotype.dir, 'train.pgen'), pvar=pvar.train)    
-  psam.train <- dplyr::mutate(dplyr::rename(data.table::fread(file.path(genotype.dir, 'train.psam')), 'FID'='#FID'), ID=paste(FID, IID, sep='_'))
-  n.chr.train <- nrow(psam.train)
-  ids.chr.train <- dplyr::pull(dplyr::select(psam.train, ID))
-#  vars.train <- sapply(1:pgenlibr::GetVariantCt(pvar.train), function(i){pgenlibr::GetVariantId(pvar.train, i)})
-  vars.train <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0('zstdcat ', file.path(genotype.dir, 'train.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
+  n.chr.train <- nrow(chr.train)
+  ids.chr.train <- rownames(chr.train)
 
   if (validation) {
     chr.val <- BEDMatrixPlus(file.path(genotype.dir, "val.bed"))
-#    n.chr.val <- nrow(chr.val)
-#    ids.chr.val <- rownames(chr.val)
-    pvar.val <- pgenlibr::NewPvar(file.path(genotype.dir, 'val.pvar.zst'))
-    pgen.val <- pgenlibr::NewPgen(file.path(genotype.dir, 'val.pgen'), pvar=pvar.val)
-    psam.val <- dplyr::mutate(dplyr::rename(data.table::fread(file.path(genotype.dir, 'val.psam')), 'FID'='#FID'), ID=paste(FID, IID, sep='_'))
-    n.chr.val <- nrow(psam.val)
-    ids.chr.val <- dplyr::pull(dplyr::select(psam.val, ID))
-#    vars.val <- sapply(1:pgenlibr::GetVariantCt(pvar.val), function(i){pgenlibr::GetVariantId(pvar.val, i)})
-    vars.val <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0('zstdcat ', file.path(genotype.dir, 'train.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID      
+    n.chr.val <- nrow(chr.val)
+    ids.chr.val <- rownames(chr.val)
   }
 
   # asssume IDs in the genotype matrix must exist in the phenotype matrix, and stop if not #
@@ -144,12 +130,10 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
   }
 
   ### --- Prepare the feature matrix --- ###
-  rowIdx.subset.train <- which(ids.chr.train %in% cat_ids[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9  
+  rowIdx.subset.train <- which(ids.chr.train %in% cat_ids[phe.master[[phenotype]] != -9])  # missing phenotypes are encoded with -9
   n.subset.train <- length(rowIdx.subset.train)
-#   stats <- computeStats(chr.train, rowIdx.subset.train, stat = c("pnas", "means", "sds"),
-#                         path = file.path(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose, buffer.verbose = buffer.verbose)
-  stats <- computeStats(chr.train, rowIdx.subset.train, genotype.dir, psam.train, stat = c("pnas", "means", "sds"),
-                        path = file.path(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose, buffer.verbose = buffer.verbose)    
+  stats <- computeStats(chr.train, rowIdx.subset.train, stat = c("pnas", "means", "sds"),
+                        path = file.path(results.dir, configs[["meta.dir"]]), save = save, configs = configs, verbose = verbose, buffer.verbose = buffer.verbose)
   phe.train <- phe.master[match(ids.chr.train, cat_ids), ]
   if (length(covariates) > 0) {
     features.train <- phe.train[, covariates, with = F]
@@ -185,15 +169,13 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
 
     if (verbose) cat("  Start computing inner product for initialization ...\n")
     prod.init.start <- Sys.time()
-    prod.full <- computeProduct(residual.full, pgen.train, vars.train, n.chr.train, rowIdx.subset.train, stats, configs, verbose = buffer.verbose, path = file.path(genotype.dir, "train.bed"))
-#    prod.full <- computeProduct(residual.full, pgen.train, rowIdx.subset.train, stats, configs, verbose = buffer.verbose, path = file.path(genotype.dir, "train.bed"))
+    prod.full <- computeProduct(residual.full, chr.train, rowIdx.subset.train, stats, configs, verbose = buffer.verbose, path = file.path(genotype.dir, "train.bed"))
     score <- abs(prod.full[, 1])
     prod.init.end <- Sys.time()
     if (verbose) cat("  End computing inner product for initialization. Elapsed time:", time_diff(prod.init.start, prod.init.end), "\n")
 
     if (is.null(lambda.min.ratio)) {
-      #lambda.min.ratio <- ifelse(n.subset.train < ncol(chr.train)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)
-      lambda.min.ratio <- ifelse(n.subset.train < pgenlibr::GetVariantCt(pvar.train)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)        
+      lambda.min.ratio <- ifelse(n.subset.train < ncol(chr.train)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)
     }
     full.lams <- computeLambdas(score, nlambda, lambda.min.ratio)
 
@@ -217,15 +199,15 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
     chr.to.keep <- setdiff(features.to.keep, covariates)
     load_start <- Sys.time()
     if (!is.null(features.train)) {
-      features.train[, (chr.to.keep) := prepareFeatures(chr.train, pgen.train, vars.train, chr.to.keep, stats, rowIdx.subset.train, debug_msg='prepF1')]
+      features.train[, (chr.to.keep) := prepareFeatures(chr.train, chr.to.keep, stats, rowIdx.subset.train)]
     } else {
-      features.train <-  prepareFeatures(chr.train, pgen.train, vars.train, chr.to.keep, stats, rowIdx.subset.train, debug_msg='prepF2')
+      features.train <- prepareFeatures(chr.train, chr.to.keep, stats, rowIdx.subset.train)
     }
     if (validation) {
       if (!is.null(features.val)) {
-        features.val[, (chr.to.keep) := prepareFeatures(chr.val, pgen.val, vars.val, chr.to.keep, stats, rowIdx.subset.val, debug_msg='prepF3')]
+        features.val[, (chr.to.keep) := prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)]
       } else {
-        features.val <- prepareFeatures(chr.val, pgen.val, vars.val, chr.to.keep, stats, rowIdx.subset.val, debug_msg='prepF4')
+        features.val <- prepareFeatures(chr.val, chr.to.keep, stats, rowIdx.subset.val)
       }
     }
     load_end <- Sys.time()
@@ -257,7 +239,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
     sorted.score <- sort(score, decreasing = T, na.last = NA)
     if (length(sorted.score) > 0) {
       features.to.add <- names(sorted.score)[1:min(num.snps.batch, length(sorted.score))]
-      features.add.train <- prepareFeatures(chr.train, pgen.train, vars.train, features.to.add, stats, rowIdx.subset.train, verbose=T, debug_msg='prepF5')
+      features.add.train <- prepareFeatures(chr.train, features.to.add, stats, rowIdx.subset.train)
       if (!is.null(features.train)) {
         features.train[, colnames(features.add.train) := features.add.train]
         rm(features.add.train)
@@ -265,7 +247,7 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
         features.train <- features.add.train
       }
       if (validation) {
-        features.add.val <- prepareFeatures(chr.val, pgen.val, vars.val, features.to.add, stats, rowIdx.subset.val, verbose=T, debug_msg='prepF6')
+        features.add.val <- prepareFeatures(chr.val, features.to.add, stats, rowIdx.subset.val)
         if (!is.null(features.val)) {
           features.val[, colnames(features.add.val) := features.add.val]
           rm(features.add.val)
@@ -320,17 +302,9 @@ snpnet <- function(genotype.dir, phenotype.file, phenotype, covariates, results.
 
     ### --- KKT Check --- ###
     if (verbose) cat("  Start checking KKT condition ...\n")
-    start.KKT.time <- Sys.time()      
-     ### debug. save the residuals 
-    dir.create(file.path(results.dir, 'debug'), showWarnings = FALSE, recursive = T)      
-    #save(residual.full, file = file.path(results.dir, 'debug', paste0("residuals_iter_", iter, ".RData")))
-    residual.full.df <- data.frame(residual.full)
-    colnames(residual.full.df) <- start.lams:num.lams
-    rownames(residual.full.df) <- ids.chr.train[rowIdx.subset.train]
-    data.table::fwrite(residual.full.df, file.path(results.dir, 'debug', paste0("residuals_iter_", iter, ".tsv")), col.names=T, row.names=T, sep='\t')
-    gc()      
-      
-    check.obj <- KKT.check(residual.full, pgen.train, vars.train, n.chr.train, rowIdx.subset.train, current.lams[start.lams:num.lams], ifelse(use.glmnetPlus, 1, lambda.idx),
+    start.KKT.time <- Sys.time()
+    gc()
+    check.obj <- KKT.check(residual.full, chr.train, rowIdx.subset.train, current.lams[start.lams:num.lams], ifelse(use.glmnetPlus, 1, lambda.idx),
                            stats, glmfit, configs, buffer.verbose, KKT.verbose, path = file.path(genotype.dir, "train.bed"))
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence

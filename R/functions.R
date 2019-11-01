@@ -1,23 +1,88 @@
-compute.summary.stats <- function(chr, subset, FUN, file.path, save = FALSE, chunkSize, nCores, verbose = FALSE, buffer.verbose = FALSE, stat.name, recompute = FALSE) {
-  if (file.exists(file.path) && !recompute) {
-    if (verbose) cat(paste0("File ", file.path, " exists. Computation skipped.\n"))
-    sum.stats <- readRDS(file.path)
-  } else {
-    start.time <- Sys.time()
-    if (verbose) cat("  Start computing stats for ", stat.name, " ...\n", sep = "")
-    sum.stats <- BGData::chunkedApply(chr, 2, FUN, i = subset, chunkSize = chunkSize, verbose = buffer.verbose, nCores = nCores)
-    names(sum.stats) <- colnames(chr)
-    if (save) {
-      saveRDS(sum.stats, file.path)
-    }
-    end.time <- Sys.time()
-    if (verbose) cat("  End computing stats for ", stat.name, ". Time elapsed: ", time_diff(start.time, end.time), "\n", sep = "")
-  }
-  sum.stats
-}
+# compute.summary.stats <- function(chr, subset, FUN, file.path, save = FALSE, chunkSize, nCores, verbose = FALSE, buffer.verbose = FALSE, stat.name, recompute = FALSE) {
+#   if (file.exists(file.path) && !recompute) {
+#     if (verbose) cat(paste0("File ", file.path, " exists. Computation skipped.\n"))
+#     sum.stats <- readRDS(file.path)
+#   } else {
+#     start.time <- Sys.time()
+#     if (verbose) cat("  Start computing stats for ", stat.name, " ...\n", sep = "")
+#     sum.stats <- BGData::chunkedApply(chr, 2, FUN, i = subset, chunkSize = chunkSize, verbose = buffer.verbose, nCores = nCores)
+#     names(sum.stats) <- colnames(chr)
+#     if (save) {
+#       saveRDS(sum.stats, file.path)
+#     }
+#     end.time <- Sys.time()
+#     if (verbose) cat("  End computing stats for ", stat.name, ". Time elapsed: ", time_diff(start.time, end.time), "\n", sep = "")
+#   }
+#   sum.stats
+# }
+
+show_counts <- function(l){data.frame(x = l) %>% count(x)}
 
 #' @importFrom data.table set as.data.table
-prepareFeatures <- function(chr, names, stat, subset) {
+prepareFeatures <- function(chr, pgen, vars, names, stat, subset, verbose=T, debug_msg='') {
+  # PLINK 2
+  var.idxs <- match(names, vars)
+  buf <- pgenlibr::ReadList(pgen, var.idxs, meanimpute=F)
+  features.add <- as.data.table(buf)
+  colnames(features.add) <- names
+  for (j in 1:length(names)) {
+    set(features.add, i=which(is.na(features.add[[j]])), j=j, value=stat[["means"]][names[j]])
+  }
+
+  # PLINK 1.9
+  bed.features.add <- chr[, names, drop=FALSE]
+  bed.features.add <- as.data.table(bed.features.add[subset, ])
+  for (j in 1:length(names)) {
+    set(bed.features.add, i=which(is.na(bed.features.add[[j]])), j=j, value=stat[["means"]][names[j]])
+  }
+
+#   print(head(bed.features.add))
+#   print(head(features.add))
+#   print(head(names))
+#   print(head(var.idxs))
+#   print(vars[head(var.idxs)])
+#   print(dim(bed.features.add))    
+#   print(dim(features.add))
+#   print(head(features.add))  
+
+#   print(count(data.frame(x = features.add[[1]]), x))    
+#   print(count(data.frame(x = bed.features.add[[1]]), x))
+#   print(stat[["means"]][names[1]])
+#     print(verbose)
+
+if(verbose){    
+    print(sprintf('===========================================checking the consistency, %s', debug_msg))
+    check.cnt <- 0
+  for (j in 1:length(names)) {
+    j.match <- all(bed.features.add[[j]] == features.add[[j]])
+      if(! j.match){
+          if(check.cnt == 0){
+              print(sprintf(
+                  '%d, %s %s %s %d %s', 
+                  j, names[[j]], colnames(bed.features.add)[[j]], colnames(features.add)[[j]],
+                  var.idxs[[j]], vars[[var.idxs[[j]]]]
+              ))
+              buf <- pgenlibr::Buf(pgen)
+              pgenlibr::Read(pgen, buf, var.idxs[[j]])
+              print(count(data.frame(g_bed   = bed.features.add[[j]]), g_bed))              
+              print(count(data.frame(g_pgen  = features.add[[j]]), g_pgen))
+              print(count(data.frame(g_pgen1 = buf), g_pgen1))
+          }
+          check.cnt <- check.cnt + 1          
+      }
+  }
+    print(sprintf('There are %d/%d alleles with mismatches', check.cnt, length(names)))
+    print('===========================================done')    
+}
+
+
+#   show_counts(features.add[,1])
+    
+  bed.features.add
+#  features.add    
+}
+
+prepareFeaturesOld <- function(chr, names, stat, subset) {
   features.add <- chr[, names, drop=FALSE]
   features.add <- as.data.table(features.add[subset, ])
   for (j in 1:ncol(features.add)) {
@@ -26,6 +91,7 @@ prepareFeatures <- function(chr, names, stat, subset) {
   features.add
 }
 
+
 computeLambdas <- function(score, nlambda, lambda.min.ratio) {
   lambda.max <- max(score, na.rm = T)
   lambda.min <- lambda.max * lambda.min.ratio
@@ -33,50 +99,47 @@ computeLambdas <- function(score, nlambda, lambda.min.ratio) {
   full.lams
 }
 
-computeStats <- function(chr, subset, stat, path, save, configs, verbose = F, buffer.verbose = F) {
-  if (save) dir.create(path, showWarnings = FALSE, recursive = T)
-  out <- list()
-  if ("pnas" %in% stat) {
-    out[["pnas"]] <- compute.summary.stats(chr, subset, function(x) mean(is.na(x)),
-                        file.path(path, "pnas.rda"), save = save, chunkSize = configs[["chunkSize"]],
-                        nCores = configs[["nCores"]], verbose = verbose, stat.name = "pnas", buffer.verbose = buffer.verbose)
-  }
-  if ("means" %in% stat) {
-    out[["means"]] <- compute.summary.stats(chr, subset, function(x) mean(x, na.rm = T),
-                         file.path(path, "means.rda"), save = save, chunkSize = configs[["chunkSize"]],
-                         nCores = configs[["nCores"]], verbose = verbose, stat.name = "means", buffer.verbose = buffer.verbose)
-  }
-  if (("sds" %in% stat) && configs[["standardize.variant"]]) {
-    snp.mst <- compute.summary.stats(chr, subset, function(x) mean(x*x, na.rm = T),
-                                     file.path(path, "mst.rda"), save = save, chunkSize = configs[["chunkSize"]],
-                                     nCores = configs[["nCores"]], verbose = verbose, stat.name = "sds", buffer.verbose = buffer.verbose)
-    out[["sds"]] <- sqrt((snp.mst - out[["means"]]^2))
-  }
-  out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
-  if (save) saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
-  out
-}
+computeStats <- function(chr, subset, genotype.dir, psam, stat, path, save, configs, verbose = F, buffer.verbose = F) {
 
-compute_stats_from_gcount <- function(genotype.dir, path, save, configs){
-  if (save) dir.create(path, showWarnings = FALSE, recursive = T)
-  out <- list()
+  gcount_tsv_f <- file.path(path, 'train.subset.gcount.tsv')
+    
+  dir.create(path, showWarnings = FALSE, recursive = T)
+  if (file.exists(gcount_tsv_f)) {
+      gcount_df <- fread(gcount_tsv_f)
+  } else {      
+      # To run plink2 --geno-counts, we write the list of IDs to a file
+      psam.IDs.all <- dplyr::pull(dplyr::select(psam, ID))
+      psam.IDs.subset <- psam.IDs.all[subset]
+      
+      data.frame(ID = psam.IDs.subset) %>%
+      separate(ID, into=c('FID', 'IID'), sep='_') %>% 
+      fwrite(file.path(path, 'train.subset.keep'), sep='\t', col.names=F)
+  
+      # Run plink2 --geno-counts
+      system(paste(
+          'plink2', 
+          '--pfile', file.path(genotype.dir, 'train'), 'vzs',
+          '--keep', file.path(path, 'train.subset.keep'),
+          '--out', file.path(path, 'train.subset'),
+          '--geno-counts cols=chrom,pos,ref,alt,homref,refalt,altxy,hapref,hapalt,missing,nobs',
+          sep='\t'
+      ), intern=F, wait=T)
 
-  gcount_df <-
-    data.table::fread(
-      file.path(genotype.dir, paste0('train.gcount'))
-      # This file is generated by
-      # plink2 --out train --pfile train \
-      # --geno-counts cols=chrom,pos,ref,alt,homref,refalt,homalt1,altxy,hapref,hapalt,missing,nobs
-    ) %>%
-    rename(original_ID = ID) %>%
-    mutate(
-      ID = paste0(original_ID, '_', ALT),
-      stats_pNAs  = MISSING_CT / (MISSING_CT + OBS_CT),
-      stats_means = (HET_REF_ALT_CTS + 2 * TWO_ALT_GENO_CTS ) / OBS_CT,
-      stats_msts  = (HET_REF_ALT_CTS + 4 * TWO_ALT_GENO_CTS ) / OBS_CT,
-      stats_SDs   = stats_msts - stats_means * stats_means
-    )
-
+      # read the gcount file
+      gcount_df <-
+        data.table::fread(
+          file.path(path, paste0('train.subset.gcount'))
+        ) %>%
+        rename(original_ID = ID) %>%
+        mutate(
+          ID = paste0(original_ID, '_', ALT),
+          stats_pNAs  = MISSING_CT / (MISSING_CT + OBS_CT),
+          stats_means = (HAP_ALT_CTS + HET_REF_ALT_CTS + 2 * TWO_ALT_GENO_CTS ) / OBS_CT,
+          stats_msts  = (HAP_ALT_CTS + HET_REF_ALT_CTS + 4 * TWO_ALT_GENO_CTS ) / OBS_CT,
+          stats_SDs   = stats_msts - stats_means * stats_means
+        )
+  }
+    
   out <- list()
   out[["pnas"]]  <- gcount_df %>% select(stats_pNAs) %>% pull()
   out[["means"]] <- gcount_df %>% select(stats_means) %>% pull()
@@ -84,36 +147,117 @@ compute_stats_from_gcount <- function(genotype.dir, path, save, configs){
 
   for(key in names(out)){
     names(out[[key]]) <- gcount_df %>% select(ID) %>% pull()
-  }
-
+  }    
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
-  if (save) saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
+    
+  if (save){
+      gcount_df %>% fwrite(file.path(path, 'train.subset.gcount.tsv'), sep='\t')
+      saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
+  }
+    
   out
 }
 
-computeProduct <- function(residual, chr, subset, stats, configs, path, verbose = T) {
-  n.chr <- nrow(chr)
-  n.subset <- length(subset)
+# computeStatsOld <- function(chr, subset, stat, path, save, configs, verbose = F, buffer.verbose = F) {    
+#   if (save) dir.create(path, showWarnings = FALSE, recursive = T)
+#   out <- list()
+#   if ("pnas" %in% stat) {
+#     out[["pnas"]] <- compute.summary.stats(chr, subset, function(x) mean(is.na(x)),
+#                         file.path(path, "pnas.rda"), save = save, chunkSize = configs[["chunkSize"]],
+#                         nCores = configs[["nCores"]], verbose = verbose, stat.name = "pnas", buffer.verbose = buffer.verbose)
+#   }
+#   if ("means" %in% stat) {
+#     out[["means"]] <- compute.summary.stats(chr, subset, function(x) mean(x, na.rm = T),
+#                          file.path(path, "means.rda"), save = save, chunkSize = configs[["chunkSize"]],
+#                          nCores = configs[["nCores"]], verbose = verbose, stat.name = "means", buffer.verbose = buffer.verbose)
+#   }
+#   if (("sds" %in% stat) && configs[["standardize.variant"]]) {
+#     snp.mst <- compute.summary.stats(chr, subset, function(x) mean(x*x, na.rm = T),
+#                                      file.path(path, "mst.rda"), save = save, chunkSize = configs[["chunkSize"]],
+#                                      nCores = configs[["nCores"]], verbose = verbose, stat.name = "sds", buffer.verbose = buffer.verbose)
+#     out[["sds"]] <- sqrt((snp.mst - out[["means"]]^2))
+#   }
+#   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
+#   if (save) saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
+#   out
+# }
+
+# compute_stats_from_gcount <- function(genotype.dir, path, save, configs){
+#   if (save) dir.create(path, showWarnings = FALSE, recursive = T)
+#   out <- list()
+
+#   gcount_df <-
+#     data.table::fread(
+#       file.path(genotype.dir, paste0('train.gcount'))
+#       # This file is generated by
+#       # plink2 --out train --pfile train \
+#       # --geno-counts cols=chrom,pos,ref,alt,homref,refalt,homalt1,altxy,hapref,hapalt,missing,nobs
+#     ) %>%
+#     rename(original_ID = ID) %>%
+#     mutate(
+#       ID = paste0(original_ID, '_', ALT),
+#       stats_pNAs  = MISSING_CT / (MISSING_CT + OBS_CT),
+#       stats_means = (HET_REF_ALT_CTS + 2 * TWO_ALT_GENO_CTS ) / OBS_CT,
+#       stats_msts  = (HET_REF_ALT_CTS + 4 * TWO_ALT_GENO_CTS ) / OBS_CT,
+#       stats_SDs   = stats_msts - stats_means * stats_means
+#     )
+
+#   out <- list()
+#   out[["pnas"]]  <- gcount_df %>% select(stats_pNAs) %>% pull()
+#   out[["means"]] <- gcount_df %>% select(stats_means) %>% pull()
+#   out[["sds"]]   <- gcount_df %>% select(stats_SDs) %>% pull()
+
+#   for(key in names(out)){
+#     names(out[[key]]) <- gcount_df %>% select(ID) %>% pull()
+#   }
+
+#   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
+#   if (save) saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
+#   out
+# }
+
+computeProduct <- function(residual, pgen, vars, n.chr, subset, stats, configs, path, verbose = T) {
   residual.full <- matrix(0, n.chr, ncol(residual))
   residual.full[subset, ] <- residual
 
-  prod.full <- chunkedApply_missing(chr, residual.full, missing = stats[["means"]], nCores = configs[["nCores"]], bufferSize = configs[["bufferSize"]], verbose = verbose, path = path)
-  if (length(dim(prod.full)) < 2) {
-    prod.full <- matrix(prod.full, ncol = 1)
+  prod.full <- matrix(0, length(vars), ncol(residual))    
+  for(residual.col in 1:ncol(residual)){
+       prod.full[, residual.col] <- pgenlibr::VariantScores(pgen, residual.full[, residual.col])      
   }
-  rownames(prod.full) <- colnames(chr)
+  rownames(prod.full) <- vars    
+  if (configs[["standardize.variant"]]) {    
+      for(residual.col in 1:ncol(residual)){
+        prod.full[, residual.col] <- apply(prod.full[, residual.col], 2, "/", stats[["sds"]])
+      }      
+  }    
   prod.full[stats[["excludeSNP"]], ] <- NA
-  prod.full <- prod.full / n.subset
-  if (configs[["standardize.variant"]]) {
-    prod.full <- apply(prod.full, 2, "/", stats[["sds"]])
-  }
+  prod.full <- prod.full / length(subset)
   prod.full
 }
 
+# computeProductOld <- function(residual, chr, subset, stats, configs, path, verbose = T) {
+#   n.chr <- nrow(chr)
+#   n.subset <- length(subset)
+#   residual.full <- matrix(0, n.chr, ncol(residual))
+#   residual.full[subset, ] <- residual
 
-KKT.check <- function(residual, chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path, aggressive = FALSE) {
+#   prod.full <- chunkedApply_missing(chr, residual.full, missing = stats[["means"]], nCores = configs[["nCores"]], bufferSize = configs[["bufferSize"]], verbose = verbose, path = path)
+#   if (length(dim(prod.full)) < 2) {
+#     prod.full <- matrix(prod.full, ncol = 1)
+#   }
+#   rownames(prod.full) <- colnames(chr)
+#   prod.full[stats[["excludeSNP"]], ] <- NA
+#   prod.full <- prod.full / n.subset
+#   if (configs[["standardize.variant"]]) {
+#     prod.full <- apply(prod.full, 2, "/", stats[["sds"]])
+#   }
+#   prod.full
+# }
+
+
+KKT.check <- function(residual, pgen, vars, n.chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path, aggressive = FALSE) {
   prod_start <- Sys.time()
-  prod.full <- computeProduct(residual, chr, subset, stats, configs, verbose, path = path)
+  prod.full <- computeProduct(residual, pgen, vars, n.chr, subset, stats, configs, verbose, path = path)
   prod_end <- Sys.time()
   # cat(paste0("Time on pure KKT product: ", prod_end - prod_start, "\n"))
 
