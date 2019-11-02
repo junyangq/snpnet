@@ -17,37 +17,40 @@ computeLambdas <- function(score, nlambda, lambda.min.ratio) {
   full.lams
 }
 
-computeStats <- function(subset, genotype.dir, psam, stat, path, save, configs, verbose = F, buffer.verbose = F) {
+read_IDs_from_psam <- function(psam){
+    df <- data.table::fread(psam) %>%
+    dplyr::rename('FID' = '#FID') %>%
+    dplyr::mutate(ID = paste(FID, IID, sep='_'))
+    df$ID
+}
 
-  gcount_tsv_f <- file.path(path, 'train.subset.gcount.tsv')
+computeStats <- function(pfile, ids, path, save, configs, vzs=TRUE) {
+  out.prefix <- file.path(path, 'snpnet.train')
     
-  dir.create(path, showWarnings = FALSE, recursive = T)
+  gcount_tsv_f <- paste0(out.prefix, '.gcount.tsv')
+    
+  dir.create(path, showWarnings = FALSE, recursive = TRUE)
   if (file.exists(gcount_tsv_f)) {
       gcount_df <- fread(gcount_tsv_f)
   } else {      
       # To run plink2 --geno-counts, we write the list of IDs to a file
-      psam.IDs.all <- dplyr::pull(dplyr::select(psam, ID))
-      psam.IDs.subset <- psam.IDs.all[subset]
-      
-      data.frame(ID = psam.IDs.subset) %>%
+      data.frame(ID = ids) %>%
       separate(ID, into=c('FID', 'IID'), sep='_') %>% 
-      fwrite(file.path(path, 'train.subset.keep'), sep='\t', col.names=F)
+      fwrite(paste0(out.prefix, '.keep'), sep='\t', col.names=F)
   
       # Run plink2 --geno-counts
       system(paste(
           'plink2', 
-          '--pfile', file.path(genotype.dir, 'train'), 'vzs',
-          '--keep', file.path(path, 'train.subset.keep'),
-          '--out', file.path(path, 'train.subset'),
+          '--pfile', pfile, ifelse(vzs, 'vzs', ''),
+          '--keep', paste0(out.prefix, '.keep'),
+          '--out', out.prefix,
           '--geno-counts cols=chrom,pos,ref,alt,homref,refalt,altxy,hapref,hapalt,missing,nobs',
           sep='\t'
       ), intern=F, wait=T)
 
       # read the gcount file
       gcount_df <-
-        data.table::fread(
-          file.path(path, paste0('train.subset.gcount'))
-        ) %>%
+        data.table::fread(paste0(out.prefix, '.gcount')) %>%
         rename(original_ID = ID) %>%
         mutate(
           ID = paste0(original_ID, '_', ALT),
@@ -69,35 +72,31 @@ computeStats <- function(subset, genotype.dir, psam, stat, path, save, configs, 
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
     
   if (save){
-      gcount_df %>% fwrite(file.path(path, 'train.subset.gcount.tsv'), sep='\t')
+      gcount_df %>% fwrite(gcount_tsv_f, sep='\t')
       saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
   }
     
   out
 }
 
-computeProduct <- function(residual, pgen, vars, n.chr, subset, stats, configs, path, verbose = T) {
-  residual.full <- matrix(0, n.chr, ncol(residual))
-  residual.full[subset, ] <- residual
-
+computeProduct <- function(residual, pgen, vars, stats, configs) {
   prod.full <- matrix(0, length(vars), ncol(residual))    
   for(residual.col in 1:ncol(residual)){
-       prod.full[, residual.col] <- pgenlibr::VariantScores(pgen, residual.full[, residual.col])      
+       prod.full[, residual.col] <- pgenlibr::VariantScores(pgen, residual[, residual.col])
   }
   rownames(prod.full) <- vars    
-  if (configs[["standardize.variant"]]) {    
+  if (configs[["standardize.variant"]]) {
       for(residual.col in 1:ncol(residual)){
         prod.full[, residual.col] <- apply(prod.full[, residual.col], 2, "/", stats[["sds"]])
-      }      
-  }    
+      }
+  }
   prod.full[stats[["excludeSNP"]], ] <- NA
-  prod.full <- prod.full / length(subset)
   prod.full
 }
 
-KKT.check <- function(residual, pgen, vars, n.chr, subset, current.lams, prev.lambda.idx, stats, glmfit, configs, verbose = F, results.verbose = F, path, aggressive = FALSE) {
-  prod_start <- Sys.time()
-  prod.full <- computeProduct(residual, pgen, vars, n.chr, subset, stats, configs, verbose, path = path)
+KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, results.verbose = F, aggressive = FALSE) {
+  prod_start <- Sys.time()    
+  prod.full <- computeProduct(residual, pgen, vars, stats, configs) / n.train
   prod_end <- Sys.time()
   # cat(paste0("Time on pure KKT product: ", prod_end - prod_start, "\n"))
 
