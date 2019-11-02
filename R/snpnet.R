@@ -40,7 +40,7 @@
 #'                 \item{meta.dir}{the relative path to the subdirectory used to store the computed
 #'                              summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`).
 #'                              Needed when `save = T` specified in the main function. Default is `"meta.dir/`.}
-#'                 \item{results.dir}{the relative path to the subdirectory used to store the intermediate
+#'                 \item{save.dir}{the relative path to the subdirectory used to store the intermediate
 #'                                 results so that we may look into or recover from later.
 #'                                 Needed when `save = T` specified in the main function. Default is `"results.dir/`.}
 #'                 \item{nlams.init}{the number of lambdas considered in the first iteration.
@@ -62,8 +62,6 @@
 #'                 we can restart from there. niter should be no less than prevIter.
 #' @param increase.size the increase in batch size if the KKT condition fails often in recent iterations.
 #'                      Default is half of the batch size.
-#' @param buffer.verbose a logical value indicating if progress is printed when computing inner product
-#'                       with the memory-mapped SNP matrix.
 #'
 #' @return A list containing the solution path, the metric evaluated on training/validation set and others.
 #'
@@ -71,34 +69,28 @@
 #'
 #' @useDynLib snpnet, .registration=TRUE
 #' @export
-snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates, results.dir = NULL,
-                   family = NULL, standardize.variant = FALSE, nlambda = 100, lambda.min.ratio = NULL,
-                   niter = 10, num.snps.batch = 1000, save = FALSE, configs, prevIter = 0,
-                   validation = FALSE, early.stopping = TRUE, glmnet.thresh = 1E-7,
-                   use.glmnetPlus = (family == "gaussian"), stopping.lag = 2, increase.size = num.snps.batch/2,
-                   verbose = FALSE, KKT.verbose = FALSE, buffer.verbose = FALSE) {
+snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL, 
+                   split.col=NULL, validation = FALSE, family = NULL, niter = 10, 
+                   results.dir = NULL, configs=NULL) {
 
-  if (prevIter >= niter) stop("prevIter is greater or equal to the total number of iterations.")
-  configs <- setup_configs_directories(
-      configs, covariates, standardize.variant, early.stopping,
-      stopping.lag, save, results.dir
-  )
+  if (configs[['prevIter']] >= niter) stop("prevIter is greater or equal to the total number of iterations.")
   start.time.tot <- Sys.time()
   cat("Start snpnet:", as.character(start.time.tot), "\n")
+    
   cat("Preprocessing start:", as.character(Sys.time()), "\n")
-
+    
+  phe.master <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = c("FID", "IID", covariates, phenotype, split.col))    
   ### --- Infer family --- ###    
   if (is.null(family)) {
-    if (all(unique(phe.master[[phenotype]] %in% c(0, 1, 2, -9)))) {
+    if (all(unique(phe.master[[phenotype]]) %in% c(0, 1, 2, -9))) {
       family <- "binomial"
     } else {
       family <- "gaussian"
     }
   }
-    
+  configs <- setup_configs_directories(configs, covariates, family, results.dir)
   ### --- Check whether to use glmnet or glmnetPlus --- ###
-  use.glmnetPlus <- checkGlmnetPlus(use.glmnetPlus, family)
-  if (use.glmnetPlus) {
+  if (configs[['use.glmnetPlus']]) {
     glmnet.settings <- glmnetPlus::glmnet.control()
     on.exit(do.call(glmnetPlus::glmnet.control, glmnet.settings))
     glmnetPlus::glmnet.control(fdev = 0, devmax = 1)
@@ -112,7 +104,6 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
   ids.all   <- read_IDs_from_psam(paste0(genotype.pfile, '.psam'))    
     
   ### --- Process phenotypes --- ###    
-  phe.master <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = c("FID", "IID", covariates, phenotype, split))
   phe.master$ID <- paste(phe.master$FID, phe.master$IID, sep = "_")
   rownames(phe.master) <- phe.master$ID
   
@@ -124,8 +115,14 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
   if (family == "binomial") phe.master[[phenotype]] <- phe.master[[phenotype]] - 1
 
   ### --- Process genotypes --- ###
-  ids.train <- ids.all[ids.all %in% phe.master$ID[phe.master[[split]] == 'train']]
-  ids.val   <- ids.all[ids.all %in% phe.master$ID[phe.master[[split]] == 'val']]
+  if(is.null(split.col)){
+    ids.train <- ids.all[ids.all %in% phe.master$ID]
+  }else{
+    ids.train <- ids.all[ids.all %in% phe.master$ID[phe.master[[split.col]] == 'train']]
+    if(validation){
+      ids.val <- ids.all[ids.all %in% phe.master$ID[phe.master[[split.col]] == 'val']]    
+    }
+  }
 
   # asssume IDs in the genotype matrix must exist in the phenotype matrix, and stop if not #
   check.missing <- ids.train[!(ids.train %in% phe.master$ID)]
@@ -165,34 +162,30 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
   }
   pgenlibr::ClosePvar(pvar)    
     
-  stats <- computeStats(
-      genotype.pfile, phe.train$ID,
-      path = file.path(results.dir, configs[["meta.dir"]]), 
-      save = save, configs = configs
-  )
+  stats <- computeStats(genotype.pfile, phe.train$ID, configs = configs)
     
   ### --- End --- ###
   cat("Preprocessing end:", as.character(Sys.time()), "\n\n")
 
-  if (prevIter == 0) {
+  if (configs[['prevIter']] == 0) {
     cat("Iteration 0. Now time:", as.character(Sys.time()), "\n")
-    form <- stats::as.formula(paste(phenotype, "~ ", paste(c(1, covariates), collapse = " + ")))
+    form <- stats::as.formula(paste(phenotype, " ~ ", paste(c(1, covariates), collapse = " + ")))
     glmmod <- stats::glm(form, data = phe.train, family = family)      
     residual <- matrix(stats::residuals(glmmod, type = "response"), ncol = 1)
     rownames(residual) <- rownames(phe.train)
 
-    if (verbose) cat("  Start computing inner product for initialization ...\n")
+    if (configs[['verbose']]) cat("  Start computing inner product for initialization ...\n")
     prod.init.start <- Sys.time()
 
     prod.full <- computeProduct(residual, pgen.train, vars, stats, configs) / nrow(phe.train)
     score <- abs(prod.full[, 1])
     prod.init.end <- Sys.time()
-    if (verbose) cat("  End computing inner product for initialization. Elapsed time:", time_diff(prod.init.start, prod.init.end), "\n")
+    if (configs[['verbose']]) cat("  End computing inner product for initialization. Elapsed time:", time_diff(prod.init.start, prod.init.end), "\n")
 
-    if (is.null(lambda.min.ratio)) {
-      lambda.min.ratio <- ifelse(nrow(phe.train) < length(vars)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)        
+    if (is.null(configs[['lambda.min.ratio']])) {
+      configs[['lambda.min.ratio']] <- ifelse(nrow(phe.train) < length(vars)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)        
     }
-    full.lams <- computeLambdas(score, nlambda, lambda.min.ratio)
+    full.lams <- computeLambdas(score, configs[['nlambda']], configs[['lambda.min.ratio']])
 
     lambda.idx <- 1
     num.lams <- configs[["nlams.init"]]
@@ -209,8 +202,8 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
     a0 <- list()
     prev.max.valid.idx <- 0
   } else {
-    cat("Recover iteration ", prevIter, ". Now time: ", as.character(Sys.time()), "\n", sep = "")
-    load(file.path(results.dir, configs[["results.dir"]], paste0("output_iter_", prevIter, ".RData")))
+    cat("Recover iteration ", configs[['prevIter']], ". Now time: ", as.character(Sys.time()), "\n", sep = "")
+    load(file.path(configs[['results.dir']], configs[["save.dir"]], paste0("output_iter_", configs[['prevIter']], ".RData")))
     chr.to.keep <- setdiff(features.to.keep, covariates)
     load_start <- Sys.time()
     if (!is.null(features.train)) {
@@ -231,16 +224,16 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
   }
   cat("\n")
 
-  for (iter in (prevIter+1):niter) {
+  for (iter in (configs[['prevIter']]+1):niter) {
     cat("Iteration ", iter, ". Now time: ", as.character(Sys.time()), "\n", sep = "")
     start.iter.time <- Sys.time()
 
     num.lams <- min(num.lams + ifelse(lambda.idx >= num.lams-configs[["nlams.delta"]]/2, configs[["nlams.delta"]], 0),
-                    nlambda)   ## extend lambda list if necessary
+                    configs[['nlambda']])   ## extend lambda list if necessary
     num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(utils::tail(num.new.valid, 3), 1))))
 
     ### --- Update the feature matrix --- ###
-    if (verbose) cat("  Start updating feature matrix ...\n")
+    if (configs[['verbose']]) cat("  Start updating feature matrix ...\n")
     start.update.time <- Sys.time()
     if (iter > 1) {
       features.to.discard <- setdiff(colnames(features.train), features.to.keep)
@@ -253,7 +246,7 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
     }
     sorted.score <- sort(score, decreasing = T, na.last = NA)
     if (length(sorted.score) > 0) {
-      features.to.add <- names(sorted.score)[1:min(num.snps.batch, length(sorted.score))]
+      features.to.add <- names(sorted.score)[1:min(configs[['num.snps.batch']], length(sorted.score))]
       features.add.train <- prepareFeatures(pgen.train, vars, features.to.add, stats)
       if (!is.null(features.train)) {
         features.train[, colnames(features.add.train) := features.add.train]
@@ -275,21 +268,21 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
     }
     end.update.time <- Sys.time()
     if (increase.snp.size)  # increase batch size when no new valid solution is found in the previous iteration, but after another round of adding new variables
-      num.snps.batch <- num.snps.batch + increase.size
-    if (verbose) cat("  End updating feature matrix. Time elapsed:", time_diff(start.update.time, end.update.time), "\n")
-    if (verbose) {
+      configs[['num.snps.batch']] <- configs[['num.snps.batch']] + configs[['increase.size']]
+    if (configs[['verbose']]) cat("  End updating feature matrix. Time elapsed:", time_diff(start.update.time, end.update.time), "\n")
+    if (configs[['verbose']]) {
       cat("  -- Number of ever-active variables: ", length(features.to.keep), ".\n", sep = "")
       cat("  -- Number of newly added variables: ", length(features.to.add), ".\n", sep = "")
       cat("  -- Total number of variables in the strong set: ", ncol(features.train), ".\n", sep = "")
     }
     ### --- Fit glmnet --- ###
-    if (verbose) cat("  Start fitting Glmnet ...\n")
+    if (configs[['verbose']]) cat("  Start fitting Glmnet ...\n")
     penalty.factor <- rep(1, ncol(features.train))
     penalty.factor[seq_len(length(covariates))] <- 0
     current.lams <- full.lams[1:num.lams]
     current.lams.adjusted <- full.lams[1:num.lams] * sum(penalty.factor) / length(penalty.factor)  # adjustment to counteract penalty factor normalization in glmnet
     start_time_glmnet <- Sys.time()
-    if (use.glmnetPlus) {
+    if (configs[['use.glmnetPlus']]) {
       start.lams <- lambda.idx   # start index in the whole lambda sequence
       if (!is.null(prev.beta)) {
         beta0 <- rep(1e-20, ncol(features.train))
@@ -297,14 +290,14 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
       } else {
         beta0 <- prev.beta
       }
-      glmfit <- glmnetPlus::glmnet(features.train, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = standardize.variant, thresh = glmnet.thresh, type.gaussian = "naive", beta0 = beta0)
+      glmfit <- glmnetPlus::glmnet(features.train, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], type.gaussian = "naive", beta0 = beta0)
     } else {
       start.lams <- 1
       features.train.matrix <- as.matrix(features.train)
-      glmfit <- glmnet::glmnet(features.train.matrix, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = standardize.variant, thresh = glmnet.thresh, type.gaussian = "naive")
+      glmfit <- glmnet::glmnet(features.train.matrix, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], type.gaussian = "naive")
     }
     glmnet.results[[iter]] <- glmfit
-    if (use.glmnetPlus) {
+    if (configs[['use.glmnetPlus']]) {
       residual <- glmfit$residuals
       pred.train <- response.train - residual
     } else {
@@ -313,25 +306,25 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
       rm(features.train.matrix) # save memory
     }
     end_time_glmnet <- Sys.time()
-    if (verbose) cat("  End fitting Glmnet. Elapsed time:", time_diff(start_time_glmnet, end_time_glmnet), "\n")
+    if (configs[['verbose']]) cat("  End fitting Glmnet. Elapsed time:", time_diff(start_time_glmnet, end_time_glmnet), "\n")
 
     ### --- KKT Check --- ###
-    if (verbose) cat("  Start checking KKT condition ...\n")
+    if (configs[['verbose']]) cat("  Start checking KKT condition ...\n")
     start.KKT.time <- Sys.time()      
     gc()
       
     check.obj <- KKT.check(
         residual, pgen.train, vars, nrow(phe.train),
-        current.lams[start.lams:num.lams], ifelse(use.glmnetPlus, 1, lambda.idx),
-        stats, glmfit, configs, KKT.verbose
+        current.lams[start.lams:num.lams], ifelse(configs[['use.glmnetPlus']], 1, lambda.idx),
+        stats, glmfit, configs,
     )
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
-    if (use.glmnetPlus && check.obj[["max.valid.idx"]] > 0) {
+    if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
     }
-    if (use.glmnetPlus) {
+    if (configs[['use.glmnetPlus']]) {
       num.new.valid[iter] <- check.obj[["max.valid.idx"]]
     } else {
       num.new.valid[iter] <- check.obj[["max.valid.idx"]] - ifelse(iter > 1, num.new.valid[iter-1], 0)
@@ -347,7 +340,7 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
         print("Time of convertion to validation matrix")
         print(Sys.time() - start_val_mat_time)
         start_pred_val_time <- Sys.time()
-        if (use.glmnetPlus) {
+        if (configs[['use.glmnetPlus']]) {
           pred.val <- glmnetPlus::predict.glmnet(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         } else {
           pred.val <- glmnet::predict.glmnet(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
@@ -366,13 +359,12 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
       increase.snp.size <- TRUE
     }
     end.KKT.time <- Sys.time()
-    if (verbose) cat("  End checking KKT condition. Elapsed time:", time_diff(start.KKT.time, end.KKT.time), "\n")
+    if (configs[['verbose']]) cat("  End checking KKT condition. Elapsed time:", time_diff(start.KKT.time, end.KKT.time), "\n")
 
-    if (save) {
+    if (configs[['save']]) {
       save(metric.train, metric.val, glmnet.results, full.lams, a0, beta, prev.beta, max.valid.idx,
-           features.to.keep, num.lams, lambda.idx, score, num.new.valid, num.snps.batch,
-           increase.snp.size, configs,
-           file = file.path(results.dir, configs[["results.dir"]], paste0("output_iter_", iter, ".RData")))
+           features.to.keep, num.lams, lambda.idx, score, num.new.valid, increase.snp.size, configs,
+           file = file.path(configs[['results.dir']], configs[["save.dir"]], paste0("output_iter_", iter, ".RData")))
     }
 
     if (max.valid.idx > prev.max.valid.idx) {
@@ -391,10 +383,10 @@ snpnet <- function(genotype.pfile, phenotype.file, split, phenotype, covariates,
     cat("Elapsed time since start: ", time_diff(start.time.tot, end.iter.time), ".\n\n", sep = "")
 
     ### --- Check stopping criteria --- ####
-    if (max.valid.idx == nlambda) break
-    if (early.stopping && validation && max.valid.idx > 2 && all(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-stopping.lag)]))) {
+    if (max.valid.idx == configs[['nlambda']]) break
+    if (configs[['early.stopping']] && validation && max.valid.idx > 2 && all(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-configs[['stopping.lag']])]))) {
       cat("Early stopped at iteration ", iter, " with validation metric: ", max(metric.val, na.rm = T), ".\n", sep = "")
-      cat("Previous ones: ", paste(metric.val[(max.valid.idx-stopping.lag+1):max.valid.idx], collapse = ", "), ".\n", sep = "")
+      cat("Previous ones: ", paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "), ".\n", sep = "")
       break
     }
     gc()

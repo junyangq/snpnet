@@ -24,7 +24,8 @@ read_IDs_from_psam <- function(psam){
     df$ID
 }
 
-computeStats <- function(pfile, ids, path, save, configs, vzs=TRUE) {
+computeStats <- function(pfile, ids, configs) {
+  path <- file.path(configs[['results.dir']], configs[["meta.dir"]])
   out.prefix <- file.path(path, 'snpnet.train')
     
   gcount_tsv_f <- paste0(out.prefix, '.gcount.tsv')
@@ -41,7 +42,7 @@ computeStats <- function(pfile, ids, path, save, configs, vzs=TRUE) {
       # Run plink2 --geno-counts
       system(paste(
           'plink2', 
-          '--pfile', pfile, ifelse(vzs, 'vzs', ''),
+          '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
           '--keep', paste0(out.prefix, '.keep'),
           '--out', out.prefix,
           '--geno-counts cols=chrom,pos,ref,alt,homref,refalt,altxy,hapref,hapalt,missing,nobs',
@@ -71,7 +72,7 @@ computeStats <- function(pfile, ids, path, save, configs, vzs=TRUE) {
   }    
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
     
-  if (save){
+  if (configs[['save']]){
       gcount_df %>% fwrite(gcount_tsv_f, sep='\t')
       saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
   }
@@ -94,7 +95,7 @@ computeProduct <- function(residual, pgen, vars, stats, configs) {
   prod.full
 }
 
-KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, results.verbose = F, aggressive = FALSE) {
+KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, aggressive = FALSE) {
   prod_start <- Sys.time()    
   prod.full <- computeProduct(residual, pgen, vars, stats, configs) / n.train
   prod_end <- Sys.time()
@@ -133,7 +134,7 @@ KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.i
   out <- list(next.lambda.idx = next.lambda.idx, score = score,
               max.valid.idx = max.valid.idx)
 
-  if (results.verbose) {
+  if (configs[['KKT.verbose']]) {
     gene.names <- rownames(prod.full)
     if (length(configs[["covariates"]]) > 0) {
       strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
@@ -194,41 +195,70 @@ simplifyList_Col <- function(x) {
 }
 
 checkGlmnetPlus <- function(use.glmnetPlus, family) {
-  if (!requireNamespace("glmnet") && !requireNamespace("glmnetPlus"))
-    stop("Please install at least glmnet or glmnetPlus.")
-  if (use.glmnetPlus) {
-    if (!requireNamespace("glmnetPlus")) {
-      warning("use.glmnetPlus was set to TRUE but glmnetPlus not found... Revert back to glmnet.")
-      use.glmnetPlus <- FALSE
-    } else if (family != "gaussian") {
-      warning("glmnetPlus currently does not support non-gaussian family... Revert back to glmnet.")
-      use.glmnetPlus <- FALSE
+    if (!requireNamespace("glmnet") && !requireNamespace("glmnetPlus"))
+        stop("Please install at least glmnet or glmnetPlus.")
+    if(is.null(use.glmnetPlus))
+        use.glmnetPlus <- (family == "gaussian")
+    if(use.glmnetPlus){
+        if (!requireNamespace("glmnetPlus")) {
+            warning("use.glmnetPlus was set to TRUE but glmnetPlus not found... Revert back to glmnet.")
+            use.glmnetPlus <- FALSE
+        } else if (family != "gaussian") {
+            warning("glmnetPlus currently does not support non-gaussian family... Revert back to glmnet.")
+            use.glmnetPlus <- FALSE
+        }
     }
-  }
-  use.glmnetPlus
+    use.glmnetPlus
 }
 
-setup_configs_directories <- function(configs, covariates, standardize.variant, early.stopping,
-                                      stopping.lag, save, results.dir) {
-  configs[["covariates"]] <- covariates
-  configs[["standardize.variant"]] <- standardize.variant
-  configs[["early.stopping"]] <- ifelse(early.stopping, stopping.lag, -1)
-  default_settings <- c(missing.rate = 0.1, MAF.thresh = 0.001, nCores = 1,
-                        nlams.init = 10, nlams.delta = 5)
-  for (name in names(default_settings)) {
-    if (!(name %in% names(configs))) configs[[name]] <- as.numeric(default_settings[name])
-  }
-  if (!("bufferSize" %in% names(configs)))
-    stop("bufferSize should be provided to guide the memory capacity.")
-  if (!("chunkSize" %in% names(configs)))
-    configs[["chunkSize"]] <- configs[["bufferSize"]] / configs[["nCores"]]
-  if (save) {
-    if (is.null(configs[["meta.dir"]])) configs[["meta.dir"]] <- "meta/"
-    if (is.null(configs[["results.dir"]])) configs[["results.dir"]] <- "results/"
-    dir.create(file.path(results.dir, configs[["meta.dir"]]), showWarnings = FALSE, recursive = T)
-    dir.create(file.path(results.dir, configs[["results.dir"]]), showWarnings = FALSE, recursive = T)
-  }
-  configs
+setup_configs_directories <- function(configs, covariates, family, results.dir) {
+    if (!("bufferSize" %in% names(configs)))
+        stop("bufferSize should be provided to guide the memory capacity.")    
+    defaults <- list(
+        missing.rate = 0.1, 
+        MAF.thresh = 0.001, 
+        nCores = 1,
+        nlams.init = 10,
+        nlams.delta = 5,
+        num.snps.batch = 1000, 
+        vzs=TRUE, # geno.pfile vzs
+        increase.size = NULL,        
+        standardize.variant = FALSE,
+        early.stopping = TRUE,
+        stopping.lag = 2,
+        nlambda = 100, 
+        lambda.min.ratio = NULL,
+        glmnet.thresh = 1E-7,
+        KKT.verbose = FALSE,
+        use.glmnetPlus = NULL,
+        chunkSize = NULL,
+        save = FALSE, 
+        prevIter = 0, 
+        meta.dir = 'meta',
+        save.dir = 'results',
+        verbose = FALSE
+    )
+    out <- defaults    
+    
+    # update the defaults with the specified parameters
+    for(name in names(configs)){
+        out[[name]] <- configs[[name]]
+    }
+    # store additional params
+    out[['covariates']] <- covariates
+    out[['family']] <- family
+    out[['results.dir']] <- results.dir
+    
+    # update settings
+    out[["early.stopping"]] <- ifelse(out[["early.stopping"]], out[['stopping.lag']], -1)
+    if(is.null(out[['increase.size']]))  out[['increase.size']] <- out[['num.snps.batch']]/2
+    out[['use.glmnetPlus']] <- checkGlmnetPlus(out[['use.glmnetPlus']], family)    
+    if(is.null(out[["chunkSize"]])) out[["chunkSize"]] <- out[["bufferSize"]] / out[["nCores"]]
+    if (out[['save']]) {
+        dir.create(file.path(results.dir, out[["meta.dir"]]), showWarnings = FALSE, recursive = T)
+        dir.create(file.path(results.dir, out[["save.dir"]]), showWarnings = FALSE, recursive = T)
+    }
+    out
 }
 
 time_diff <- function(start_time, end_time) {
