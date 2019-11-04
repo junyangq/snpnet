@@ -74,10 +74,10 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
                    results.dir = NULL, configs=NULL) {
 
   if (configs[['prevIter']] >= niter) stop("prevIter is greater or equal to the total number of iterations.")
-  start.time.tot <- Sys.time()
-  cat("Start snpnet:", as.character(start.time.tot), "\n")
+  time.start <- Sys.time()
+  snpnetLogger('Start snpnet', log.time = time.start)
     
-  cat("Preprocessing start:", as.character(Sys.time()), "\n")
+  snpnetLogger('Preprocessing start')
     
   phe.master <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = c("FID", "IID", covariates, phenotype, split.col))    
   ### --- Infer family --- ###    
@@ -165,22 +165,21 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
   stats <- computeStats(genotype.pfile, phe.train$ID, configs = configs)
     
   ### --- End --- ###
-  cat("Preprocessing end:", as.character(Sys.time()), "\n\n")
+  snpnetLoggerTimeDiff("Preprocessing end.", time.start, indent=1)
 
   if (configs[['prevIter']] == 0) {
-    cat("Iteration 0. Now time:", as.character(Sys.time()), "\n")
+    snpnetLogger("Iteration 0")
     form <- stats::as.formula(paste(phenotype, " ~ ", paste(c(1, covariates), collapse = " + ")))
     glmmod <- stats::glm(form, data = phe.train, family = family)      
     residual <- matrix(stats::residuals(glmmod, type = "response"), ncol = 1)
     rownames(residual) <- rownames(phe.train)
 
-    if (configs[['verbose']]) cat("  Start computing inner product for initialization ...\n")
-    prod.init.start <- Sys.time()
+    if (configs[['verbose']]) snpnetLogger("  Start computing inner product for initialization ...")
+    time.prod.init.start <- Sys.time()
 
     prod.full <- computeProduct(residual, pgen.train, vars, stats, configs) / nrow(phe.train)
     score <- abs(prod.full[, 1])
-    prod.init.end <- Sys.time()
-    if (configs[['verbose']]) cat("  End computing inner product for initialization. Elapsed time:", time_diff(prod.init.start, prod.init.end), "\n")
+    if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
 
     if (is.null(configs[['lambda.min.ratio']])) {
       configs[['lambda.min.ratio']] <- ifelse(nrow(phe.train) < length(vars)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)        
@@ -202,10 +201,10 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     a0 <- list()
     prev.max.valid.idx <- 0
   } else {
-    cat("Recover iteration ", configs[['prevIter']], ". Now time: ", as.character(Sys.time()), "\n", sep = "")
+    time.load.start <- Sys.time()
+    snpnetLogger(paste0("Recover iteration ", configs[['prevIter']]))
     load(file.path(configs[['results.dir']], configs[["save.dir"]], paste0("output_iter_", configs[['prevIter']], ".RData")))
     chr.to.keep <- setdiff(features.to.keep, covariates)
-    load_start <- Sys.time()
     if (!is.null(features.train)) {
       features.train[, (chr.to.keep) := prepareFeatures(pgen.train, vars, chr.to.keep, stats)]
     } else {
@@ -218,23 +217,22 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
         features.val <- prepareFeatures(pgen.val, vars, chr.to.keep, stats)
       }
     }
-    load_end <- Sys.time()
-    cat("Time elapsed on loading back features:", time_diff(load_start, load_end), "\n")
     prev.max.valid.idx <- max.valid.idx
+    snpnetLoggerTimeDiff("Time elapsed on loading back features", time.load.start)
   }
   cat("\n")
 
   for (iter in (configs[['prevIter']]+1):niter) {
-    cat("Iteration ", iter, ". Now time: ", as.character(Sys.time()), "\n", sep = "")
-    start.iter.time <- Sys.time()
+    time.iter.start <- Sys.time()
+    snpnetLogger(paste0("Iteration ", iter), log.time=time.iter.start)
 
     num.lams <- min(num.lams + ifelse(lambda.idx >= num.lams-configs[["nlams.delta"]]/2, configs[["nlams.delta"]], 0),
                     configs[['nlambda']])   ## extend lambda list if necessary
     num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(utils::tail(num.new.valid, 3), 1))))
 
     ### --- Update the feature matrix --- ###
-    if (configs[['verbose']]) cat("  Start updating feature matrix ...\n")
-    start.update.time <- Sys.time()
+    if (configs[['verbose']]) snpnetLogger("Start updating feature matrix ...", indent=1)
+    time.update.start <- Sys.time()
     if (iter > 1) {
       features.to.discard <- setdiff(colnames(features.train), features.to.keep)
       if (length(features.to.discard) > 0) {
@@ -266,22 +264,27 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     } else {
       break
     }
-    end.update.time <- Sys.time()
     if (increase.snp.size)  # increase batch size when no new valid solution is found in the previous iteration, but after another round of adding new variables
       configs[['num.snps.batch']] <- configs[['num.snps.batch']] + configs[['increase.size']]
-    if (configs[['verbose']]) cat("  End updating feature matrix. Time elapsed:", time_diff(start.update.time, end.update.time), "\n")
+    if (configs[['verbose']]) snpnetLoggerTimeDiff("End updating feature matrix.", time.update.start, indent=2)
     if (configs[['verbose']]) {
-      cat("  -- Number of ever-active variables: ", length(features.to.keep), ".\n", sep = "")
-      cat("  -- Number of newly added variables: ", length(features.to.add), ".\n", sep = "")
-      cat("  -- Total number of variables in the strong set: ", ncol(features.train), ".\n", sep = "")
+      snpnetLogger(paste0("- # ever-active variables: ", length(features.to.keep), "."), indent=2)
+      snpnetLogger(paste0("- # newly added variables: ", length(features.to.add), "."), indent=2)
+      snpnetLogger(paste0("- Total # variables in the strong set: ", ncol(features.train), "."), indent=2)
     }
     ### --- Fit glmnet --- ###
-    if (configs[['verbose']]) cat("  Start fitting Glmnet ...\n")
+    if (configs[['verbose']]){
+        if(configs[['use.glmnetPlus']]){
+            snpnetLogger("Start fitting Glmnet with glmnetPlus ...", indent=1)
+        }else{
+            snpnetLogger("Start fitting Glmnet ...", indent=1)
+        }
+    }
     penalty.factor <- rep(1, ncol(features.train))
     penalty.factor[seq_len(length(covariates))] <- 0
     current.lams <- full.lams[1:num.lams]
     current.lams.adjusted <- full.lams[1:num.lams] * sum(penalty.factor) / length(penalty.factor)  # adjustment to counteract penalty factor normalization in glmnet
-    start_time_glmnet <- Sys.time()
+    time.glmnet.start <- Sys.time()
     if (configs[['use.glmnetPlus']]) {
       start.lams <- lambda.idx   # start index in the whole lambda sequence
       if (!is.null(prev.beta)) {
@@ -305,12 +308,11 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
       residual <- response.train - pred.train
       rm(features.train.matrix) # save memory
     }
-    end_time_glmnet <- Sys.time()
-    if (configs[['verbose']]) cat("  End fitting Glmnet. Elapsed time:", time_diff(start_time_glmnet, end_time_glmnet), "\n")
+    if (configs[['verbose']]) snpnetLoggerTimeDiff("End fitting Glmnet.", time.glmnet.start, indent=2)
 
     ### --- KKT Check --- ###
-    if (configs[['verbose']]) cat("  Start checking KKT condition ...\n")
-    start.KKT.time <- Sys.time()      
+    if (configs[['verbose']]) snpnetLogger("Start checking KKT condition ...", indent=1)
+    time.KKT.start <- Sys.time()      
     gc()
       
     check.obj <- KKT.check(
@@ -336,18 +338,16 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
       }
       metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], response.train, family)
       if (validation) {
-        start_val_mat_time <- Sys.time()
-        print("Time of convertion to validation matrix")
-        print(Sys.time() - start_val_mat_time)
-        start_pred_val_time <- Sys.time()
+        time.val.mat.start <- Sys.time()
+        snpnetLoggerTimeDiff("Convertion to validation matrix.", time.val.mat.start, indent=2)
+        time.val.pred.start <- Sys.time()
         if (configs[['use.glmnetPlus']]) {
           pred.val <- glmnetPlus::predict.glmnet(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         } else {
           pred.val <- glmnet::predict.glmnet(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         }
         metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response.val, family)
-        print("Time of prediction on validation matrix")
-        print(Sys.time() - start_pred_val_time)
+        snpnetLoggerTimeDiff("Time of prediction on validation matrix", time.val.pred.start, indent=2)
       }
       score <- check.obj[["score"]]
       is.ever.active <- apply(glmfit$beta[, 1:check.obj[["max.valid.idx"]], drop = F], 1, function(x) any(x != 0))
@@ -358,8 +358,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
       features.to.keep <- union(features.to.keep, features.to.add)
       increase.snp.size <- TRUE
     }
-    end.KKT.time <- Sys.time()
-    if (configs[['verbose']]) cat("  End checking KKT condition. Elapsed time:", time_diff(start.KKT.time, end.KKT.time), "\n")
+    if (configs[['verbose']]) snpnetLoggerTimeDiff("End checking KKT condition.", time.KKT.start, indent=2)
 
     if (configs[['save']]) {
       save(metric.train, metric.val, glmnet.results, full.lams, a0, beta, prev.beta, max.valid.idx,
@@ -368,32 +367,34 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     }
 
     if (max.valid.idx > prev.max.valid.idx) {
+      if (validation) {
+        snpnetLogger('Training and validation metric:', indent=1)
+      }else{
+        snpnetLogger('Training metric:', indent=1)
+      }
       for (klam in (prev.max.valid.idx+1):max.valid.idx) {
-        cat("  -- Finished Lambda ", klam, ". Training Metric: ", metric.train[klam], ". ", sep = "")
         if (validation) {
-          cat("Validation Metric: ", metric.val[klam], "\n")
+            snpnetLogger(paste0("- Lambda idx ", klam, ". Training: ", metric.train[klam], ". Validation: ", metric.val[klam]), indent=1)
         } else {
-          cat("\n")
+            snpnetLogger(paste0("- Lambda idx ", klam, ". Training: ", metric.train[klam], ". "), indent=1)
         }
       }
       prev.max.valid.idx <- max.valid.idx
     }
-    end.iter.time <- Sys.time()
-    cat("Time spent on this iteration: ", time_diff(start.iter.time, end.iter.time), ". ", sep = "")
-    cat("Elapsed time since start: ", time_diff(start.time.tot, end.iter.time), ".\n\n", sep = "")
+    time.iter.end <- Sys.time()
+    snpnetLoggerTimeDiff(paste0("End iteration ", iter, '.'), time.iter.start, time.iter.end, indent=1)
+    snpnetLoggerTimeDiff("The total time since start.", time.start, time.iter.end, indent=2)
 
     ### --- Check stopping criteria --- ####
     if (max.valid.idx == configs[['nlambda']]) break
-    if (configs[['early.stopping']] && validation && max.valid.idx > 2 && all(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-configs[['stopping.lag']])]))) {
-      cat("Early stopped at iteration ", iter, " with validation metric: ", max(metric.val, na.rm = T), ".\n", sep = "")
-      cat("Previous ones: ", paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "), ".\n", sep = "")
+    if (validation && configs[['early.stopping']] && max.valid.idx > 2 && all(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-configs[['stopping.lag']])]))) {
+      snpnetLogger(paste0("Early stopped at iteration ", iter, " (Lambda idx=", which.max(metric.val), ") with validation metric: ", max(metric.val, na.rm = T), "."))
+      snpnetLogger(paste0("Previous ones: ", paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "), "."), indent=1)
       break
     }
     gc()
   }
-  end.time.tot <- Sys.time()
-  cat("End snpnet:", as.character(end.time.tot), "\n")
-  cat("Total time elapsed:", end.time.tot-start.time.tot, units(end.time.tot-start.time.tot), "\n")
+  snpnetLoggerTimeDiff("End snpnet.", time.start)
 
   out <- list(metric.train = metric.train, metric.val = metric.val, glmnet.results = glmnet.results,
               full.lams = full.lams, a0 = a0, beta = beta, configs = configs)

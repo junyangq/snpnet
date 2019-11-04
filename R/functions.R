@@ -81,10 +81,14 @@ computeStats <- function(pfile, ids, configs) {
 }
 
 computeProduct <- function(residual, pgen, vars, stats, configs) {
+  time.computeProduct.start <- Sys.time()
+  snpnetLogger('Start computeProduct()', indent=2, log.time=time.computeProduct.start)
+  snpnetLogger('Start VariantScores()', indent=3, log.time=time.computeProduct.start)
   prod.full <- matrix(0, length(vars), ncol(residual))    
   for(residual.col in 1:ncol(residual)){
        prod.full[, residual.col] <- pgenlibr::VariantScores(pgen, residual[, residual.col])
   }
+  snpnetLoggerTimeDiff('End VariantScores().', time.computeProduct.start, indent=4)
   rownames(prod.full) <- vars    
   if (configs[["standardize.variant"]]) {
       for(residual.col in 1:ncol(residual)){
@@ -92,21 +96,22 @@ computeProduct <- function(residual, pgen, vars, stats, configs) {
       }
   }
   prod.full[stats[["excludeSNP"]], ] <- NA
+  snpnetLoggerTimeDiff('End computeProduct().', time.computeProduct.start, indent=3)
   prod.full
 }
 
 KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, aggressive = FALSE) {
-  prod_start <- Sys.time()    
+  time.KKT.check.start <- Sys.time()
+  if (configs[['KKT.verbose']]) snpnetLogger('Start KKT.check()', indent=1, log.time=time.KKT.check.start)
   prod.full <- computeProduct(residual, pgen, vars, stats, configs) / n.train
-  prod_end <- Sys.time()
-  # cat(paste0("Time on pure KKT product: ", prod_end - prod_start, "\n"))
-
+  if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- computeProduct.', indent=2, start.time=time.KKT.check.start)
   num.lams <- length(current.lams)
   if (length(configs[["covariates"]]) > 0) {
     strong.vars <- match(rownames(glmfit$beta[-(1:length(configs[["covariates"]])), , drop = FALSE]), rownames(prod.full))
   } else {
     strong.vars <- match(rownames(glmfit$beta), rownames(prod.full))
   }
+  if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- strong.vars.', indent=2, start.time=time.KKT.check.start)    
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
 
   if (aggressive) {
@@ -121,6 +126,8 @@ KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.i
   } else {
     mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
   }
+  if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- mat.cmp.', indent=2, start.time=time.KKT.check.start)    
+
   num.violates <- apply(abs(prod.full[weak.vars, , drop = FALSE]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
 
   idx.violation <- which((num.violates != 0) & ((1:num.lams) >= prev.lambda.idx))
@@ -131,6 +138,8 @@ KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.i
   } else {
     score <- NULL
   }
+  if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- score.', indent=2, start.time=time.KKT.check.start) 
+
   out <- list(next.lambda.idx = next.lambda.idx, score = score,
               max.valid.idx = max.valid.idx)
 
@@ -261,6 +270,17 @@ setup_configs_directories <- function(configs, covariates, family, results.dir) 
     out
 }
 
-time_diff <- function(start_time, end_time) {
-  paste(round(end_time-start_time, 4), units(end_time-start_time))
+snpnetLogger <- function(message, log.time = NULL, indent=0){
+    if (is.null(log.time)) log.time <- Sys.time()
+    cat('[', as.character(log.time), ' snpnet] ', rep(' ', indent * 2), message, '\n', sep='')
+}
+
+timeDiff <- function(start.time, end.time = NULL) {
+    if (is.null(end.time)) end.time <- Sys.time()    
+    paste(round(end.time-start.time, 4), units(end.time-start.time))
+}
+
+snpnetLoggerTimeDiff <- function(message, start.time, end.time = NULL, indent=0){
+    if (is.null(end.time)) end.time <- Sys.time()
+    snpnetLogger(paste(message, "Time elapsed:", timeDiff(start.time, end.time), sep=' '), log.time=end.time, indent=indent)
 }
