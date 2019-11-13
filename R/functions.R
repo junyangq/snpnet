@@ -16,24 +16,10 @@ computeLambdas <- function(score, nlambda, lambda.min.ratio) {
   full.lams
 }
 
-readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col){
-    if(family == 'cox' || is.null(family)){
-        selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
-    } else{
-        selectCols <- c("FID", "IID", covariates, phenotype, split.col)
-    }
-    phe.master <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = selectCols)   
-    phe.master$ID <- paste(phe.master$FID, phe.master$IID, sep = "_")
-    # sort in the order of genotype file?
-    # use psam.ids
-    rownames(phe.master) <- phe.master$ID    
-    phe.master
-}
-
 inferFamily <- function(phe, phenotype, status){
     if (all(unique(phe[[phenotype]] %in% c(0, 1, 2, -9)))) {
         family <- "binomial"
-    } else if(status %in% colnames(df)) {
+    } else if(status %in% colnames(phe)) {
         family <- "cox"
     } else {
         family <- "gaussian"
@@ -46,6 +32,28 @@ readIDsFromPsam <- function(psam){
     dplyr::rename('FID' = '#FID') %>%
     dplyr::mutate(ID = paste(FID, IID, sep='_'))
     df$ID
+}
+
+readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col){
+    if(family == 'cox' || is.null(family)){
+        selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
+    } else{
+        selectCols <- c("FID", "IID", covariates, phenotype, split.col)
+    }
+    phe.master.unsorted <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = selectCols)
+    phe.master.unsorted$ID <- paste(phe.master.unsorted$FID, phe.master.unsorted$IID, sep = "_")
+
+    # make sure the phe.master has the same individual ordering as in the genotype data
+    phe.master <- phe.master.unsorted %>%
+    dplyr::left_join(
+        data.frame(ID = psam.ids, stringsAsFactors=F) %>%
+        dplyr::mutate(sort_order = 1:n()),
+        by='ID'
+    ) %>%
+    dplyr::arrange(sort_order) %>% dplyr::select(-sort_order) %>%
+    data.table::as.data.table()
+    rownames(phe.master) <- phe.master$ID
+    phe.master
 }
 
 computeStats <- function(pfile, ids, configs) {
@@ -271,6 +279,10 @@ computeMetric <- function(pred, response, family) {
     stop(paste0('The specified family (', family, ') is not supported!'))
   }
   metric
+}
+
+computeCoxgrad <- function(glmfits, time, d){
+    apply(glmfits, 2, function(f){coxgrad(f,time,d,w=rep(1,length(f)),eps=0.00001)})
 }
 
 simplifyList_Col <- function(x) {
