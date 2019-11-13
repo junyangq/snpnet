@@ -133,6 +133,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
 
   ### --- Prepare the feature matrix --- ###
   phe.train <- phe.master[match(ids.train, phe.no.missing.IDs), ]
+  rownames(phe.train) <- phe.train$ID
   if (length(covariates) > 0) {
     features.train <- phe.train[, covariates, with = F]
   } else {
@@ -140,6 +141,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
   }
   if (validation) {
     phe.val <- phe.master[match(ids.val, phe.no.missing.IDs), ]
+    rownames(phe.val) <- phe.val$ID
     if (length(covariates) > 0) {
       features.val <- phe.val[, covariates, with = F]
     } else {
@@ -149,7 +151,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
 
   ### --- Prepare the response --- ###
   # cat(paste0("Number of missing phenotypes in the training set: ", n.train - n.subset.train, "\n"))
-  response.train <- phe.train[[phenotype]]    
+  response.train <- phe.train[[phenotype]]
   if (validation) response.val <- phe.val[[phenotype]]
 
   ### --- Read genotypes --- ###
@@ -173,11 +175,12 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     glmmod <- stats::glm(form, data = phe.train, family = family)      
     residual <- matrix(stats::residuals(glmmod, type = "response"), ncol = 1)
     rownames(residual) <- rownames(phe.train)
+    colnames(residual) <- c('0')
 
     if (configs[['verbose']]) snpnetLogger("  Start computing inner product for initialization ...")
     time.prod.init.start <- Sys.time()
 
-    prod.full <- computeProduct(residual, pgen.train, vars, stats, configs) / nrow(phe.train)
+    prod.full <- computeProduct(residual, genotype.pfile, vars, stats, configs, iter=0) / nrow(phe.train)
     score <- abs(prod.full[, 1])
     if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
 
@@ -308,18 +311,21 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
       residual <- response.train - pred.train
       rm(features.train.matrix) # save memory
     }
+    rownames(residual) <- rownames(phe.train)
+    colnames(residual) <- start.lams:num.lams
     if (configs[['verbose']]) snpnetLoggerTimeDiff("End fitting Glmnet.", time.glmnet.start, indent=2)
 
     ### --- KKT Check --- ###
     if (configs[['verbose']]) snpnetLogger("Start checking KKT condition ...", indent=1)
     time.KKT.start <- Sys.time()      
-    gc()
-      
+    print(gc())
+
     check.obj <- KKT.check(
-        residual, pgen.train, vars, nrow(phe.train),
+        residual, genotype.pfile, vars, nrow(phe.train),
         current.lams[start.lams:num.lams], ifelse(configs[['use.glmnetPlus']], 1, lambda.idx),
-        stats, glmfit, configs,
+        stats, glmfit, configs, iter
     )
+
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
     if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
@@ -392,9 +398,10 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
       snpnetLogger(paste0("Previous ones: ", paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "), "."), indent=1)
       break
     }
-    gc()
+    print(gc())
   }
   snpnetLoggerTimeDiff("End snpnet.", time.start)
+  print(gc())
 
   out <- list(metric.train = metric.train, metric.val = metric.val, glmnet.results = glmnet.results,
               full.lams = full.lams, a0 = a0, beta = beta, configs = configs)

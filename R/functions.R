@@ -1,13 +1,12 @@
 #' @importFrom data.table set as.data.table
 prepareFeatures <- function(pgen, vars, names, stat) {
-  var.idxs <- match(names, vars)
-  buf <- pgenlibr::ReadList(pgen, var.idxs, meanimpute=F)
+  buf <- pgenlibr::ReadList(pgen, match(names, vars), meanimpute=F)
   features.add <- as.data.table(buf)
   colnames(features.add) <- names
   for (j in 1:length(names)) {
     set(features.add, i=which(is.na(features.add[[j]])), j=j, value=stat[["means"]][names[j]])
   }
-  features.add    
+  features.add
 }
 
 computeLambdas <- function(score, nlambda, lambda.min.ratio) {
@@ -25,33 +24,33 @@ read_IDs_from_psam <- function(psam){
 }
 
 computeStats <- function(pfile, ids, configs) {
-  path <- file.path(configs[['results.dir']], configs[["meta.dir"]])
-  out.prefix <- file.path(path, 'snpnet.train')
-    
-  gcount_tsv_f <- paste0(out.prefix, '.gcount.tsv')
-    
-  dir.create(path, showWarnings = FALSE, recursive = TRUE)
+  keep_f       <- paste0(configs[['gcount.full.prefix']], '.keep')
+  gcount_tsv_f <- paste0(configs[['gcount.full.prefix']], '.gcount.tsv')
+
+  dir.create(dirname(configs[['gcount.full.prefix']]), showWarnings = FALSE, recursive = TRUE)
   if (file.exists(gcount_tsv_f)) {
       gcount_df <- fread(gcount_tsv_f)
   } else {      
       # To run plink2 --geno-counts, we write the list of IDs to a file
       data.frame(ID = ids) %>%
       separate(ID, into=c('FID', 'IID'), sep='_') %>% 
-      fwrite(paste0(out.prefix, '.keep'), sep='\t', col.names=F)
+      fwrite(keep_f, sep='\t', col.names=F)
   
       # Run plink2 --geno-counts
       system(paste(
           'plink2', 
+          '--threads', configs[['nCores']],
+          '--memory', configs[['mem']],
           '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
-          '--keep', paste0(out.prefix, '.keep'),
-          '--out', out.prefix,
+          '--keep', keep_f,
+          '--out', configs[['gcount.full.prefix']],
           '--geno-counts cols=chrom,pos,ref,alt,homref,refalt,altxy,hapref,hapalt,missing,nobs',
-          sep='\t'
+          sep=' '
       ), intern=F, wait=T)
 
       # read the gcount file
       gcount_df <-
-        data.table::fread(paste0(out.prefix, '.gcount')) %>%
+        data.table::fread(paste0(configs[['gcount.full.prefix']], '.gcount')) %>%
         rename(original_ID = ID) %>%
         mutate(
           ID = paste0(original_ID, '_', ALT),
@@ -74,21 +73,68 @@ computeStats <- function(pfile, ids, configs) {
     
   if (configs[['save']]){
       gcount_df %>% fwrite(gcount_tsv_f, sep='\t')
-      saveRDS(out[["excludeSNP"]], file = file.path(path, "excludeSNP.rda"))
+      saveRDS(out[["excludeSNP"]], file = file.path(dirname(configs[['gcount.full.prefix']]), "excludeSNP.rda"))
   }
-    
+
   out
 }
 
-computeProduct <- function(residual, pgen, vars, stats, configs) {
+read_bin_mat <- function(fhead, configs){
+    # This is a helper function to read binary matrix file (from plink2 --variant-score zs bin)
+    rows <- fread(cmd=paste0('zstdcat ', fhead, '.vars.zst'), head=F)$V1
+    cols <- fread(paste0(fhead, '.cols'), head=F)$V1
+    bin.reader <- file(paste0(fhead, '.bin'), 'rb')
+    M = matrix(
+        readBin(bin.reader, 'double', n=length(rows)*length(cols), endian = configs[['endian']]),
+        nrow=length(rows), ncol=length(cols), byrow = T
+    )
+    close(bin.reader)
+    colnames(M) <- cols
+    rownames(M) <- rows
+    if (! configs[['save']]) system(paste(
+        'rm', paste0(fhead, '.cols'), paste0(fhead, '.vars.zst'), 
+        paste0(fhead, '.bin'), sep=' '
+    ), intern=F, wait=T)
+    M
+}
+
+computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
   time.computeProduct.start <- Sys.time()
   snpnetLogger('Start computeProduct()', indent=2, log.time=time.computeProduct.start)
-  snpnetLogger('Start VariantScores()', indent=3, log.time=time.computeProduct.start)
-  prod.full <- matrix(0, length(vars), ncol(residual))    
-  for(residual.col in 1:ncol(residual)){
-       prod.full[, residual.col] <- pgenlibr::VariantScores(pgen, residual[, residual.col])
-  }
-  snpnetLoggerTimeDiff('End VariantScores().', time.computeProduct.start, indent=4)
+
+  snpnetLogger('Start plink2 --variant-score', indent=3, log.time=time.computeProduct.start)    
+  dir.create(file.path(configs[['results.dir']], configs[["save.dir"]]), showWarnings = FALSE, recursive = T)
+    
+  residual_f <- file.path(configs[['results.dir']], configs[["save.dir"]], paste0("residuals_iter_", iter, ".tsv"))
+    
+  # write residuals to a file
+  residual_df <- data.frame(residual)
+  colnames(residual_df) <- paste0('lambda_idx_', colnames(residual))
+  residual_df %>%    
+    rownames_to_column("ID") %>%
+    separate(ID, into=c('#FID', 'IID'), sep='_') %>% 
+    fwrite(residual_f, sep='\t', col.names=T)
+        
+  # Run plink2 --geno-counts
+    system(paste(
+      'plink2', 
+        '--threads', configs[['nCores']],
+        '--memory', configs[['mem']],
+        '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
+        '--read-freq', paste0(configs[['gcount.full.prefix']], '.gcount'),
+        '--keep', residual_f,
+        '--out', str_replace_all(residual_f, '.tsv$', ''),
+        '--variant-score', residual_f, 'zs', 'bin', 
+        sep=' '
+    ), intern=F, wait=T)
+
+  prod.full <- read_bin_mat(str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
+  if (! configs[['save']]) system(paste(
+      'rm', residual_f, str_replace_all(residual_f, '.tsv$', '.log'), sep=' '
+  ), intern=F, wait=T)
+    
+  snpnetLoggerTimeDiff('End plink2 --variant-score.', time.computeProduct.start, indent=4)
+    
   rownames(prod.full) <- vars    
   if (configs[["standardize.variant"]]) {
       for(residual.col in 1:ncol(residual)){
@@ -100,10 +146,10 @@ computeProduct <- function(residual, pgen, vars, stats, configs) {
   prod.full
 }
 
-KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, aggressive = FALSE) {
+KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, iter) {
   time.KKT.check.start <- Sys.time()
   if (configs[['KKT.verbose']]) snpnetLogger('Start KKT.check()', indent=1, log.time=time.KKT.check.start)
-  prod.full <- computeProduct(residual, pgen, vars, stats, configs) / n.train
+  prod.full <- computeProduct(residual, pfile, vars, stats, configs, iter) / n.train
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- computeProduct.', indent=2, start.time=time.KKT.check.start)
   num.lams <- length(current.lams)
   if (length(configs[["covariates"]]) > 0) {
@@ -114,7 +160,8 @@ KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.i
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- strong.vars.', indent=2, start.time=time.KKT.check.start)    
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
 
-  if (aggressive) {
+  if (configs[['KKT.check.aggressive.experimental']]) {
+      # An approach to address numerial precision issue.
     if (length(configs[["covariates"]]) > 0) {
       strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
     } else {
@@ -165,7 +212,7 @@ KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.i
     max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
     max.abs.prod.weak <- apply(abs(prod.weak), 2, max, na.rm = T)
 
-    print.out <- data.frame(
+    print(data.frame(
       lambda = current.lams,
       num.active = apply(active, 2, sum, na.rm = T),
       min.abs.prod.active = min.abs.prod.active,
@@ -175,8 +222,7 @@ KKT.check <- function(residual, pgen, vars, n.train, current.lams, prev.lambda.i
       max.abs.prod.strong = max.abs.prod.strong,
       max.abs.prod.weak = max.abs.prod.weak,
       num.violates = num.violates
-    )
-    print(print.out)
+    ))
   }
   out
 }
@@ -221,12 +267,15 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
 }
 
 setup_configs_directories <- function(configs, covariates, family, results.dir) {
-    if (!("bufferSize" %in% names(configs)))
-        stop("bufferSize should be provided to guide the memory capacity.")    
+#     if (!("bufferSize" %in% names(configs)))
+#         stop("bufferSize should be provided to guide the memory capacity.")    
+    if (!("mem" %in% names(configs)))
+        stop("mem should be provided to guide the memory capacity.")        
     defaults <- list(
         missing.rate = 0.1, 
         MAF.thresh = 0.001, 
         nCores = 1,
+#         mem = NULL,
         nlams.init = 10,
         nlams.delta = 5,
         num.snps.batch = 1000, 
@@ -240,12 +289,15 @@ setup_configs_directories <- function(configs, covariates, family, results.dir) 
         glmnet.thresh = 1E-7,
         KKT.verbose = FALSE,
         use.glmnetPlus = NULL,
-        chunkSize = NULL,
         save = FALSE, 
         prevIter = 0, 
         meta.dir = 'meta',
         save.dir = 'results',
-        verbose = FALSE
+        verbose = FALSE,
+        KKT.check.aggressive.experimental = FALSE,
+        gcount.basename.prefix = 'snpnet.train',
+        gcount.full.prefix=NULL,
+        endian="little"
     )
     out <- defaults    
     
@@ -261,8 +313,12 @@ setup_configs_directories <- function(configs, covariates, family, results.dir) 
     # update settings
     out[["early.stopping"]] <- ifelse(out[["early.stopping"]], out[['stopping.lag']], -1)
     if(is.null(out[['increase.size']]))  out[['increase.size']] <- out[['num.snps.batch']]/2
-    out[['use.glmnetPlus']] <- checkGlmnetPlus(out[['use.glmnetPlus']], family)    
-    if(is.null(out[["chunkSize"]])) out[["chunkSize"]] <- out[["bufferSize"]] / out[["nCores"]]
+    out[['use.glmnetPlus']] <- checkGlmnetPlus(out[['use.glmnetPlus']], family)
+    
+    if(is.null(out[['gcount.full.prefix']])) out[['gcount.full.prefix']] <- file.path(
+        out[['results.dir']], out[["meta.dir"]], out['gcount.basename.prefix']
+    )
+        
     if (out[['save']]) {
         dir.create(file.path(results.dir, out[["meta.dir"]]), showWarnings = FALSE, recursive = T)
         dir.create(file.path(results.dir, out[["save.dir"]]), showWarnings = FALSE, recursive = T)
@@ -284,3 +340,4 @@ snpnetLoggerTimeDiff <- function(message, start.time, end.time = NULL, indent=0)
     if (is.null(end.time)) end.time <- Sys.time()
     snpnetLogger(paste(message, "Time elapsed:", timeDiff(start.time, end.time), sep=' '), log.time=end.time, indent=indent)
 }
+
