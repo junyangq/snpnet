@@ -16,7 +16,32 @@ computeLambdas <- function(score, nlambda, lambda.min.ratio) {
   full.lams
 }
 
-read_IDs_from_psam <- function(psam){
+readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col){
+    if(family == 'cox' || is.null(family)){
+        selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
+    } else{
+        selectCols <- c("FID", "IID", covariates, phenotype, split.col)
+    }
+    phe.master <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = selectCols)   
+    phe.master$ID <- paste(phe.master$FID, phe.master$IID, sep = "_")
+    # sort in the order of genotype file?
+    # use psam.ids
+    rownames(phe.master) <- phe.master$ID    
+    phe.master
+}
+
+inferFamily <- function(phe, phenotype, status){
+    if (all(unique(phe[[phenotype]] %in% c(0, 1, 2, -9)))) {
+        family <- "binomial"
+    } else if(status %in% colnames(df)) {
+        family <- "cox"
+    } else {
+        family <- "gaussian"
+    } 
+    family
+}
+
+readIDsFromPsam <- function(psam){
     df <- data.table::fread(psam) %>%
     dplyr::rename('FID' = '#FID') %>%
     dplyr::mutate(ID = paste(FID, IID, sep='_'))
@@ -79,7 +104,7 @@ computeStats <- function(pfile, ids, configs) {
   out
 }
 
-read_bin_mat <- function(fhead, configs){
+readBinMat <- function(fhead, configs){
     # This is a helper function to read binary matrix file (from plink2 --variant-score zs bin)
     rows <- fread(cmd=paste0('zstdcat ', fhead, '.vars.zst'), head=F)$V1
     cols <- fread(paste0(fhead, '.cols'), head=F)$V1
@@ -128,7 +153,7 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
         sep=' '
     ), intern=F, wait=T)
 
-  prod.full <- read_bin_mat(str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
+  prod.full <- readBinMat(str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
   if (! configs[['save']]) system(paste(
       'rm', residual_f, str_replace_all(residual_f, '.tsv$', '.log'), sep=' '
   ), intern=F, wait=T)
@@ -226,9 +251,9 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
   }
   out
 }
-
+                                 
 computeMetric <- function(pred, response, family) {
-  if (family == "gaussian") {
+  if ((family == "gaussian")) {
     metric <- 1 - apply((response - pred)^2, 2, sum) / sum((response - mean(response))^2)
   } else if (family == "binomial") {
     metric <- apply(pred, 2, function(x) {
@@ -236,7 +261,16 @@ computeMetric <- function(pred, response, family) {
       auc.obj <- ROCR::performance(pred.obj, measure = 'auc' )
       auc.obj@y.values[[1]]
     })
+  } else if (family == "cox") {
+    d0 <- glmnet::coxnet.deviance(NULL, response)
+    metric <- apply(pred, 2, function(p) {
+      d <- glmnet::coxnet.deviance(p, response)
+      1 - d/d0
+    })  
+  } else {
+    stop(paste0('The specified family (', family, ') is not supported!'))
   }
+  metric
 }
 
 simplifyList_Col <- function(x) {
@@ -266,16 +300,14 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
     use.glmnetPlus
 }
 
-setup_configs_directories <- function(configs, covariates, family, results.dir) {
-#     if (!("bufferSize" %in% names(configs)))
-#         stop("bufferSize should be provided to guide the memory capacity.")    
+setupConfigs <- function(configs, covariates, family, results.dir) {
     if (!("mem" %in% names(configs)))
         stop("mem should be provided to guide the memory capacity.")        
     defaults <- list(
         missing.rate = 0.1, 
         MAF.thresh = 0.001, 
         nCores = 1,
-#         mem = NULL,
+        mem = NULL,
         nlams.init = 10,
         nlams.delta = 5,
         num.snps.batch = 1000, 

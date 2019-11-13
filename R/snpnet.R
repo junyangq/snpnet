@@ -69,7 +69,7 @@
 #'
 #' @useDynLib snpnet, .registration=TRUE
 #' @export
-snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL, 
+snpnet <- function(genotype.pfile, phenotype.file, phenotype, status = NULL, covariates = NULL, 
                    split.col=NULL, validation = FALSE, family = NULL, niter = 10, 
                    results.dir = NULL, configs=NULL) {
 
@@ -78,17 +78,17 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
   snpnetLogger('Start snpnet', log.time = time.start)
     
   snpnetLogger('Preprocessing start')
+
+  ### --- Read genotype IDs --- ###
+  ids <- list()
+  phe <- list()
+  ids[['all']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))    
+  ### --- Read phenotype file --- ###
+  phe[['master']] <- readPheMaster(phenotype.file, ids[['all']], family, covariates, phenotype, status, split.col)
+  ### --- infer family and update the configs --- ###    
+  if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status)
+  configs <- setupConfigs(configs, covariates, family, results.dir)
     
-  phe.master <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = c("FID", "IID", covariates, phenotype, split.col))    
-  ### --- Infer family --- ###    
-  if (is.null(family)) {
-    if (all(unique(phe.master[[phenotype]]) %in% c(0, 1, 2, -9))) {
-      family <- "binomial"
-    } else {
-      family <- "gaussian"
-    }
-  }
-  configs <- setup_configs_directories(configs, covariates, family, results.dir)
   ### --- Check whether to use glmnet or glmnetPlus --- ###
   if (configs[['use.glmnetPlus']]) {
     glmnet.settings <- glmnetPlus::glmnet.control()
@@ -99,72 +99,64 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     on.exit(do.call(glmnet::glmnet.control, glmnet.settings))
     glmnet::glmnet.control(fdev = 0, devmax = 1)
   }
-    
-  ### --- Read genotype IDs --- ###
-  ids.all   <- read_IDs_from_psam(paste0(genotype.pfile, '.psam'))    
-    
-  ### --- Process phenotypes --- ###    
-  phe.master$ID <- paste(phe.master$FID, phe.master$IID, sep = "_")
-  rownames(phe.master) <- phe.master$ID
-  
-  phe.no.missing.IDs <- phe.master$ID[
-      (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
-      (!is.na(phe.master[[phenotype]])) &
-      (phe.master$ID %in% ids.all) # check if we have genotype
+        
+  ### --- Process phenotypes --- ###  
+  phe.no.missing.IDs <- phe[['master']]$ID[
+      (phe[['master']][[phenotype]] != -9) & # missing phenotypes are encoded with -9
+      (!is.na(phe[['master']][[phenotype]])) &
+      (phe[['master']]$ID %in% ids[['all']]) # check if we have genotype
   ] 
-  if (family == "binomial") phe.master[[phenotype]] <- phe.master[[phenotype]] - 1
+  if (family == "binomial") phe[['master']][[phenotype]] <- phe[['master']][[phenotype]] - 1
 
-  ### --- Process genotypes --- ###
+  ### --- Process genotypes --- ###    
   if(is.null(split.col)){
-    ids.train <- ids.all[ids.all %in% phe.master$ID]
+    splits <- c('train')      
+    ids[['train']] <- ids[['all']][ids[['all']] %in% phe[['master']]$ID]
   }else{
-    ids.train <- ids.all[ids.all %in% phe.master$ID[phe.master[[split.col]] == 'train']]
-    if(validation){
-      ids.val <- ids.all[ids.all %in% phe.master$ID[phe.master[[split.col]] == 'val']]    
-    }
+    splits <- c('train', 'val')
+    for(s in splits) ids[[s]] <- ids[['all']][ids[['all']] %in% phe[['master']]$ID[phe[['master']][[split.col]] == s]]
   }
 
   # asssume IDs in the genotype matrix must exist in the phenotype matrix, and stop if not #
-  check.missing <- ids.train[!(ids.train %in% phe.master$ID)]
-  if (validation) check.missing <- c(check.missing, ids.val[!(ids.val %in% phe.master$ID)])
-  if (length(check.missing) > 0) {
-    stop(paste0("Missing phenotype entry (", phenotype, ") for: ", utils::head(check.missing, 5), " ...\n"))
-  } 
+  for(s in splits){
+      check.missing <- ids[[s]][!(ids[[s]] %in% phe[['master']]$ID)]
+      if (length(check.missing) > 0) {
+          stop(paste0("Missing phenotype entry (", phenotype, ") for: ", utils::head(check.missing, 5), " ...\n"))
+      }
+  }
 
   ### --- Prepare the feature matrix --- ###
-  phe.train <- phe.master[match(ids.train, phe.no.missing.IDs), ]
-  rownames(phe.train) <- phe.train$ID
-  if (length(covariates) > 0) {
-    features.train <- phe.train[, covariates, with = F]
-  } else {
-    features.train <- NULL
-  }
-  if (validation) {
-    phe.val <- phe.master[match(ids.val, phe.no.missing.IDs), ]
-    rownames(phe.val) <- phe.val$ID
-    if (length(covariates) > 0) {
-      features.val <- phe.val[, covariates, with = F]
-    } else {
-      features.val <- NULL
-    }
-  }
+  features <- list()  
+  for(s in splits){
+      phe[[s]] <- phe[['master']][match(ids[[s]], phe.no.missing.IDs), ]
+      rownames(phe[[s]]) <- phe[[s]]$ID
+      if (length(covariates) > 0) {
+          features[[s]] <- phe[[s]][, covariates, with = F]
+      } else {
+          features[[s]] <- NULL
+      }
+  }    
 
   ### --- Prepare the response --- ###
   # cat(paste0("Number of missing phenotypes in the training set: ", n.train - n.subset.train, "\n"))
-  response.train <- phe.train[[phenotype]]
-  if (validation) response.val <- phe.val[[phenotype]]
-
+  response <- list() ; status <- list() ; surv <- list()
+  for(s in splits){ 
+      response[[s]] <- phe[[s]][[phenotype]]
+      if (family == "cox") {
+          status[[s]] <- phe[[s]][[status]]
+          surv[[s]] <- survival::Surv(response[[s]], status[[s]])
+      }
+  }
+ 
   ### --- Read genotypes --- ###
 #  vars.train <- sapply(1:pgenlibr::GetVariantCt(pvar.train), function(i){pgenlibr::GetVariantId(pvar.train, i)})
   vars <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0('zstdcat ', paste0(genotype.pfile, '.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
   pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
-  pgen.train <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids.train, ids.all))
-  if (validation) {
-     pgen.val <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids.val, ids.all))
-  }
+  pgen <- list()
+  for(s in splits) pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['all']]))
   pgenlibr::ClosePvar(pvar)    
     
-  stats <- computeStats(genotype.pfile, phe.train$ID, configs = configs)
+  stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
     
   ### --- End --- ###
   snpnetLoggerTimeDiff("Preprocessing end.", time.start, indent=1)
@@ -172,20 +164,20 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
   if (configs[['prevIter']] == 0) {
     snpnetLogger("Iteration 0")
     form <- stats::as.formula(paste(phenotype, " ~ ", paste(c(1, covariates), collapse = " + ")))
-    glmmod <- stats::glm(form, data = phe.train, family = family)      
+    glmmod <- stats::glm(form, data = phe[['train']], family = family)      
     residual <- matrix(stats::residuals(glmmod, type = "response"), ncol = 1)
-    rownames(residual) <- rownames(phe.train)
+    rownames(residual) <- rownames(phe[['train']])
     colnames(residual) <- c('0')
 
     if (configs[['verbose']]) snpnetLogger("  Start computing inner product for initialization ...")
     time.prod.init.start <- Sys.time()
 
-    prod.full <- computeProduct(residual, genotype.pfile, vars, stats, configs, iter=0) / nrow(phe.train)
+    prod.full <- computeProduct(residual, genotype.pfile, vars, stats, configs, iter=0) / nrow(phe[['train']])
     score <- abs(prod.full[, 1])
     if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
 
     if (is.null(configs[['lambda.min.ratio']])) {
-      configs[['lambda.min.ratio']] <- ifelse(nrow(phe.train) < length(vars)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)        
+      configs[['lambda.min.ratio']] <- ifelse(nrow(phe[['train']]) < length(vars)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)        
     }
     full.lams <- computeLambdas(score, configs[['nlambda']], configs[['lambda.min.ratio']])
 
@@ -208,18 +200,13 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     snpnetLogger(paste0("Recover iteration ", configs[['prevIter']]))
     load(file.path(configs[['results.dir']], configs[["save.dir"]], paste0("output_iter_", configs[['prevIter']], ".RData")))
     chr.to.keep <- setdiff(features.to.keep, covariates)
-    if (!is.null(features.train)) {
-      features.train[, (chr.to.keep) := prepareFeatures(pgen.train, vars, chr.to.keep, stats)]
-    } else {
-      features.train <-  prepareFeatures(pgen.train, vars, chr.to.keep, stats)
-    }
-    if (validation) {
-      if (!is.null(features.val)) {
-        features.val[, (chr.to.keep) := prepareFeatures(pgen.val, vars, chr.to.keep, stats)]
+    for(s in splits){
+      if (!is.null(features[[s]])) {
+        features[[s]][, (chr.to.keep) := prepareFeatures(pgen[[s]], vars, chr.to.keep, stats)]
       } else {
-        features.val <- prepareFeatures(pgen.val, vars, chr.to.keep, stats)
+        features[[s]] <- prepareFeatures(pgen[[s]], vars, chr.to.keep, stats)
       }
-    }
+    }            
     prev.max.valid.idx <- max.valid.idx
     snpnetLoggerTimeDiff("Time elapsed on loading back features", time.load.start)
   }
@@ -237,32 +224,24 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     if (configs[['verbose']]) snpnetLogger("Start updating feature matrix ...", indent=1)
     time.update.start <- Sys.time()
     if (iter > 1) {
-      features.to.discard <- setdiff(colnames(features.train), features.to.keep)
+      features.to.discard <- setdiff(colnames(features[['train']]), features.to.keep)
       if (length(features.to.discard) > 0) {
-        features.train[, (features.to.discard) := NULL]
-        if (validation) features.val[, (features.to.discard) := NULL]
+          for(s in splits) features[[s]][, (features.to.discard) := NULL]
       }
-      which.in.model <- which(names(score) %in% colnames(features.train))
+      which.in.model <- which(names(score) %in% colnames(features[['train']]))
       score[which.in.model] <- NA
     }
     sorted.score <- sort(score, decreasing = T, na.last = NA)
     if (length(sorted.score) > 0) {
       features.to.add <- names(sorted.score)[1:min(configs[['num.snps.batch']], length(sorted.score))]
-      features.add.train <- prepareFeatures(pgen.train, vars, features.to.add, stats)
-      if (!is.null(features.train)) {
-        features.train[, colnames(features.add.train) := features.add.train]
-        rm(features.add.train)
-      } else {
-        features.train <- features.add.train
-      }
-      if (validation) {
-        features.add.val <- prepareFeatures(pgen.val, vars, features.to.add, stats)
-        if (!is.null(features.val)) {
-          features.val[, colnames(features.add.val) := features.add.val]
-          rm(features.add.val)
+      for(s in splits){
+        tmp.features.add <- prepareFeatures(pgen[[s]], vars, features.to.add, stats)
+        if (!is.null(features[[s]])) {
+          features[[s]][, colnames(tmp.features.add) := tmp.features.add]
         } else {
-          features.val <- features.add.val
+          features[[s]] <- tmp.features.add
         }
+        rm(tmp.features.add)
       }
     } else {
       break
@@ -273,7 +252,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     if (configs[['verbose']]) {
       snpnetLogger(paste0("- # ever-active variables: ", length(features.to.keep), "."), indent=2)
       snpnetLogger(paste0("- # newly added variables: ", length(features.to.add), "."), indent=2)
-      snpnetLogger(paste0("- Total # variables in the strong set: ", ncol(features.train), "."), indent=2)
+      snpnetLogger(paste0("- Total # variables in the strong set: ", ncol(features[['train']]), "."), indent=2)
     }
     ### --- Fit glmnet --- ###
     if (configs[['verbose']]){
@@ -283,7 +262,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
             snpnetLogger("Start fitting Glmnet ...", indent=1)
         }
     }
-    penalty.factor <- rep(1, ncol(features.train))
+    penalty.factor <- rep(1, ncol(features[['train']]))
     penalty.factor[seq_len(length(covariates))] <- 0
     current.lams <- full.lams[1:num.lams]
     current.lams.adjusted <- full.lams[1:num.lams] * sum(penalty.factor) / length(penalty.factor)  # adjustment to counteract penalty factor normalization in glmnet
@@ -291,27 +270,27 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     if (configs[['use.glmnetPlus']]) {
       start.lams <- lambda.idx   # start index in the whole lambda sequence
       if (!is.null(prev.beta)) {
-        beta0 <- rep(1e-20, ncol(features.train))
-        beta0[match(names(prev.beta), colnames(features.train))] <- prev.beta
+        beta0 <- rep(1e-20, ncol(features[['train']]))
+        beta0[match(names(prev.beta), colnames(features[['train']]))] <- prev.beta
       } else {
         beta0 <- prev.beta
       }
-      glmfit <- glmnetPlus::glmnet(features.train, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], type.gaussian = "naive", beta0 = beta0)
+      glmfit <- glmnetPlus::glmnet(features[['train']], response[['train']], family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], type.gaussian = "naive", beta0 = beta0)
     } else {
       start.lams <- 1
-      features.train.matrix <- as.matrix(features.train)
-      glmfit <- glmnet::glmnet(features.train.matrix, response.train, family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], type.gaussian = "naive")
+      tmp.features.matrix <- as.matrix(features[['train']])
+      glmfit <- glmnet::glmnet(tmp.features.matrix, response[['train']], family = family, lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], type.gaussian = "naive")
     }
     glmnet.results[[iter]] <- glmfit
     if (configs[['use.glmnetPlus']]) {
       residual <- glmfit$residuals
-      pred.train <- response.train - residual
+      pred.train <- response[['train']] - residual
     } else {
-      pred.train <- stats::predict(glmfit, newx = features.train.matrix, type = "response")
-      residual <- response.train - pred.train
-      rm(features.train.matrix) # save memory
+      pred.train <- stats::predict(glmfit, newx = tmp.features.matrix, type = "response")
+      residual <- response[['train']] - pred.train
+      rm(tmp.features.matrix) # save memory
     }
-    rownames(residual) <- rownames(phe.train)
+    rownames(residual) <- rownames(phe[['train']])
     colnames(residual) <- start.lams:num.lams
     if (configs[['verbose']]) snpnetLoggerTimeDiff("End fitting Glmnet.", time.glmnet.start, indent=2)
 
@@ -321,7 +300,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
     print(gc())
 
     check.obj <- KKT.check(
-        residual, genotype.pfile, vars, nrow(phe.train),
+        residual, genotype.pfile, vars, nrow(phe[['train']]),
         current.lams[start.lams:num.lams], ifelse(configs[['use.glmnetPlus']], 1, lambda.idx),
         stats, glmfit, configs, iter
     )
@@ -342,17 +321,17 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, covariates = NULL,
         a0[[j + (start.lams - 1)]] <- as.numeric(glmfit$a0[j])
         beta[[j + (start.lams - 1)]] <- glmfit$beta[, j]
       }
-      metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], response.train, family)
+      metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], response[['train']], family)
       if (validation) {
         time.val.mat.start <- Sys.time()
         snpnetLoggerTimeDiff("Convertion to validation matrix.", time.val.mat.start, indent=2)
         time.val.pred.start <- Sys.time()
         if (configs[['use.glmnetPlus']]) {
-          pred.val <- glmnetPlus::predict.glmnet(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+          pred.val <- glmnetPlus::predict.glmnet(glmfit, newx = as.matrix(features[['val']]), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         } else {
-          pred.val <- glmnet::predict.glmnet(glmfit, newx = as.matrix(features.val), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
+          pred.val <- glmnet::predict.glmnet(glmfit, newx = as.matrix(features[['val']]), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
         }
-        metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response.val, family)
+        metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response[['val']], family)
         snpnetLoggerTimeDiff("Time of prediction on validation matrix", time.val.pred.start, indent=2)
       }
       score <- check.obj[["score"]]
