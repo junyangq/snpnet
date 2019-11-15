@@ -3,66 +3,73 @@
 #' Fit the entire lasso solution path using the Batch Screening Iterative Lasso (BASIL) algorithm
 #' on large phenotype-genotype datasets.
 #'
+#' Junyang Qian, Wenfei Du, Yosuke Tanigawa, Matthew Aguirre, Robert Tibshirani, Manuel A. Rivas, and Trevor Hastie.
+#' "A Fast and Flexible Algorithm for Solving the Lasso in Large-scale and Ultrahigh-dimensional Problems."
+#' bioRxiv (2019): https://doi.org/10.1101/630079
+#'
 #' @param genotype.pfile the PLINK 2.0 pgen file that contains genotype. 
-#'                       Assume at least the existence of pfile.{pgen,pvar.zst,psam}.
+#'                       We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.
 #' @param phenotype.file the path of the file that contains the phenotype values and can be read as
-#'                       as a table. There should be an ID column containing a unique identifier for
-#'                       each individual, (optional) some covariate columns and phenotype columns.
+#'                       as a table. There should be FID (family ID) and IID (individual ID) columns 
+#'                       containing the identifier for each individual and phenotype column(s).
+#'                       (optional) some covariate columns and a colunn specifying the 
+#'                       training/validation split can be included in this file.
 #' @param phenotype the name of the phenotype. Must be the same as the corresponding column name in
 #'                  the phenotype file.
-#' @param results.dir the path to the directory where meta and intermediate results are saved.
-#' @param niter the number of maximum iteration in the algorithm.
-#' @param family the type of the phenotype: "gaussian" or "binomial". If not provided or NULL, it will be
-#'               detected based on the number of levels in the response.
-#' @param standardize.variant a logical value indicating whether the variants are standardized in
-#'                            the lasso fitting. Default is FALSE. For SNP matrix, we may not want
-#'                            to standardize since the variants are already on the same scale.
-#' @param nlambda the number of lambda values on the solution path. Default is 100.
-#' @param lambda.min.ratio the ratio of the minimum lambda considered versus the maximum lambda that
-#'                         makes all penalized coefficients zero.
-#' @param validation a logical value indicating if performance is evaluated on the validation set. If so,
-#'                   val.bed/bim/fam should be available in genotype.dir.
+#' @param status.col the column name for the status column for Cox proportional hazards model.
+#'                   When running the Cox model, the specified column must exist in the phenotype file.
 #' @param covariates a character vector containing the names of the covariates included in the lasso
 #'                   fitting, whose coefficients will not be penalized. The names must exist in the
 #'                   column names of the phenotype file.
-#' @param num.snps.batch the number of variants added to the strong set in each iteration. Default is 1000.
-#' @param glmnet.thresh the convergence threshold used in glmnet/glmnetPlus.
-#' @param configs a list of other config parameters. \code{bufferSize} must be provided.
+#' @param split.col the column name in the phenotype file that specifies the membership of individuals to
+#'                  the training or the validation set. The individuals marked as "train" and "val" will
+#'                  be treated as the training and validation set, respectively. When specified, the
+#'                  model performance is evaluated on both the training and the validation sets.
+#' @param family the type of the phenotype: "gaussian", "binomial", or "cox". If not provided or NULL, it will be
+#'               detected based on the number of levels in the response.    
+#' @param configs a list of other config parameters. \code{mem} must be provided.
 #'                \describe{
 #'                 \item{missing.rate}{variants are excluded if the missing rate exceeds this level. Default is 0.05.}
 #'                 \item{MAF.thresh}{variants are excluded if the minor allele frequency (MAF) is lower
 #'                                than this level. Default is 0.001.}
 #'                 \item{nCores}{the number of cores used for computation. You may use the maximum number
 #'                            of cores available on the computer. Default is 1, single core.}
-#'                 \item{\strong{bufferSize}}{the maximum number of SNP columns we want to load at a time subject
-#'                                to memory bound (used in KKT check). For example, a dataset of 200K
-#'                                * 10K takes around 15 Gbs of memory.}
+#'                 \item{\strong{mem}}{the memory size (MB).}
+#'                 \item{results.dir}{the path to the directory where meta and intermediate results are saved.}
 #'                 \item{meta.dir}{the relative path to the subdirectory used to store the computed
 #'                              summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`).
 #'                              Needed when `save = T` specified in the main function. Default is `"meta.dir/`.}
 #'                 \item{save.dir}{the relative path to the subdirectory used to store the intermediate
-#'                                 results so that we may look into or recover from later.
-#'                                 Needed when `save = T` specified in the main function. Default is `"results.dir/`.}
+#'                              results so that we may look into or recover from later.
+#'                              Needed when `save = T` specified in the main function. Default is `"results.dir/`.}
 #'                 \item{nlams.init}{the number of lambdas considered in the first iteration.
-#'                                Default 10 is a reasonable number to start with.}
+#'                              Default 10 is a reasonable number to start with.}
 #'                 \item{nlams.delta}{the length of extended lambdas down the sequence when there are few
-#'                                 left in the current sequence (remember we don't fit all lambdas
-#'                                 every iteration, only extend when most of the current ones have been completed and validated). Default is 5.}
+#'                              left in the current sequence (remember we don't fit all lambdas
+#'                              every iteration, only extend when most of the current ones have been completed and validated). Default is 5.}
+#'                 \item{standardize.variant}{a logical value indicating whether the variants are standardized in the lasso fitting.
+#'                              Default is FALSE. For SNP matrix, we may not want to standardize since the variants are already on the same scale.}
+#'                 \item{nlambda}{the number of lambda values on the solution path. The default is 100.}
+#'                 \item{niter}{The number of maximum iteration in the algorithm. The default is 10.}
+#'                 \item{lambda.min.ratio}{the ratio of the minimum lambda considered versus 
+#'                              the maximum lambda that makes all penalized coefficients zero.}
+#'                 \item{num.snps.batch}{the number of variants added to the strong set in each iteration. Default is 1000.}
+#'                 \item{glmnet.thresh}{the convergence threshold used in glmnet/glmnetPlus.}
+#'                 \item{verbose}{a logical value indicating if more detailed messages should be printed.}
+#'                 \item{save}{a logical value whether to save the intermediate results (e.g. in case of job failure and restart).}
+#'                 \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if 
+#'                              the glmnetPlus package is available. Currently only "gaussian" family is supported.}
+#'                 \item{early.stopping}{a logical value indicating whether early stopping based on validation metric is desired.}
+#'                 \item{stopping.lag}{a parameter for the stopping criterion such that the procedure stops after
+#'                              this number of consecutive decreases in the validation metric.}
+#'                 \item{KKT.verbose}{a logical value indicating if details on KKT check should be printed.}
+#'                 \item{prevIter}{if non-zero, it indicates the last successful iteration in the procedure so that 
+#'                              we can restart from there. niter should be no less than prevIter.}
+#'                 \item{increase.size}{the increase in batch size if the KKT condition fails often in recent iterations.
+#'                              Default is half of the batch size.}
+#'                 \item{plink2.path}{the user-specified path to plink2 (default: plink2)}
+#'                 \item{zstdcat.path}{the user-specified path to zstdcat (default: zstdcat)}
 #'                }
-#' @param verbose a logical value indicating if more detailed messages should be printed.
-#' @param save a logical value whether to save intermediate results (e.g. in case of job failure and restart).
-#' @param use.glmnetPlus a logical value whether to use glmnet with warm start, if the glmnetPlus
-#'                       package is available. Currently only "gaussian" family is supported.
-#' @param early.stopping a logical value indicating whether early stopping based on validation
-#'                       metric is desired.
-#' @param stopping.lag a parameter for the stopping criterion such that the procedure stops after
-#'                     this number of consecutive decreases in the validation metric.
-#' @param KKT.verbose a logical value indicating if details on KKT check should be printed.
-#' @param prevIter if non-zero, it indicates the last successful iteration in the procedure so that
-#'                 we can restart from there. niter should be no less than prevIter.
-#' @param increase.size the increase in batch size if the KKT condition fails often in recent iterations.
-#'                      Default is half of the batch size.
-#'
 #' @return A list containing the solution path, the metric evaluated on training/validation set and others.
 #'
 #' @importFrom data.table ':='
@@ -70,14 +77,13 @@
 #' @useDynLib snpnet, .registration=TRUE
 #' @export
 snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL, covariates = NULL, 
-                   split.col=NULL, validation = FALSE, family = NULL, niter = 10, 
-                   results.dir = NULL, configs=NULL) {
-
-  if (configs[['prevIter']] >= niter) stop("prevIter is greater or equal to the total number of iterations.")
+                   split.col=NULL, family = NULL, configs=NULL) {
+  validation <- (!is.null(split.col))
+  if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
   time.start <- Sys.time()
   snpnetLogger('Start snpnet', log.time = time.start)
     
-  snpnetLogger('Preprocessing start')
+  snpnetLogger('Preprocessing start..')
 
   ### --- Read genotype IDs --- ###
   ids <- list(); phe <- list()
@@ -86,7 +92,8 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   phe[['master']] <- readPheMaster(phenotype.file, ids[['all']], family, covariates, phenotype, status.col, split.col)
   ### --- infer family and update the configs --- ###    
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
-  configs <- setupConfigs(configs, covariates, family, results.dir)
+  configs <- setupConfigs(configs, covariates, family)
+  if (configs[['verbose']]) print(configs)
   ### --- Check whether to use glmnet or glmnetPlus --- ###
   if (configs[['use.glmnetPlus']]) {
     glmnet.settings <- glmnetPlus::glmnet.control()
@@ -104,7 +111,13 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       (!is.na(phe[['master']][[phenotype]])) &
       (phe[['master']]$ID %in% ids[['all']]) # check if we have genotype
   ] 
-  if (family == "binomial") phe[['master']][[phenotype]] <- phe[['master']][[phenotype]] - 1
+  if (family == "binomial"){
+      # The input binary phenotype is coded as 2/1 (case/control)
+      # For glmnet, we map this to 1/0 (case/control)
+      # The following expression will replace -9 (missing) with -10, but
+      # the set of individuals with no-missing values are already computed.
+      phe[['master']][[phenotype]] <- phe[['master']][[phenotype]] - 1
+  }
 
   ### --- Process genotypes --- ###    
   if(is.null(split.col)){
@@ -119,7 +132,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   for(s in splits){
       check.missing <- ids[[s]][!(ids[[s]] %in% phe[['master']]$ID)]
       if (length(check.missing) > 0) {
-          stop(paste0("Missing phenotype entry (", phenotype, ") for: ", utils::head(check.missing, 5), " ...\n"))
+          warning(paste0("Missing phenotype entry (", phenotype, ") in ", s, " set for: ", utils::head(check.missing, 5), " ...\n"))
       }
   }
 
@@ -133,11 +146,12 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       } else {
           features[[s]] <- NULL
       }
+      if(configs[['verbose']]) snpnetLogger(sprintf("The number of individuals in %s set: %d", s, dim(phe[[s]])[1]))
   }    
 
   ### --- Prepare the response --- ###
   # cat(paste0("Number of missing phenotypes in the training set: ", n.train - n.subset.train, "\n"))
-  response <- list() ; status <- list() ; surv <- list()
+  response <- list() ; status <- list() ; surv <- list() ; pred <- list()
   for(s in splits){
       response[[s]] <- phe[[s]][[phenotype]]
       if (family == "cox") {
@@ -147,8 +161,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   }
 
   ### --- Read genotypes --- ###
-#  vars.train <- sapply(1:pgenlibr::GetVariantCt(pvar.train), function(i){pgenlibr::GetVariantId(pvar.train, i)})
-  vars <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0('zstdcat ', paste0(genotype.pfile, '.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
+  vars <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0(configs[['zstdcat.path']], ' ', paste0(genotype.pfile, '.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
   pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
   pgen <- list()
   for(s in splits) pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['all']]))
@@ -200,10 +213,13 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     beta <- list()
     a0 <- list()
     prev.max.valid.idx <- 0
+    earlyStopNow <- FALSE
   } else {
     time.load.start <- Sys.time()
     snpnetLogger(paste0("Recover iteration ", configs[['prevIter']]))
+    current.configs <- configs
     load(file.path(configs[['results.dir']], configs[["save.dir"]], paste0("output_iter_", configs[['prevIter']], ".RData")))
+    configs <- current.configs
     chr.to.keep <- setdiff(features.to.keep, covariates)
     for(s in splits){
       if (!is.null(features[[s]])) {
@@ -214,10 +230,11 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     }            
     prev.max.valid.idx <- max.valid.idx
     snpnetLoggerTimeDiff("Time elapsed on loading back features", time.load.start)
+    earlyStopNow <- (validation && checkEarlyStopping(metric.val, max.valid.idx, configs[['prevIter']], configs))
   }
   cat("\n")
-
-  for (iter in (configs[['prevIter']]+1):niter) {
+  if(! earlyStopNow){
+  for (iter in (configs[['prevIter']]+1):configs[['niter']]) {
     time.iter.start <- Sys.time()
     snpnetLogger(paste0("Iteration ", iter), log.time=time.iter.start)
 
@@ -320,14 +337,14 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
     ### --- KKT Check --- ###
     if (configs[['verbose']]) snpnetLogger("Start checking KKT condition ...", indent=1)
-    time.KKT.start <- Sys.time()      
-    print(gc())
+    time.KKT.start <- Sys.time()
 
     check.obj <- KKT.check(
         residual, genotype.pfile, vars, nrow(phe[['train']]),
         current.lams[start.lams:num.lams], ifelse(configs[['use.glmnetPlus']], 1, lambda.idx),
         stats, glmfit, configs, iter
     )
+    snpnetLogger("KKT check obj done ...", indent=1)
 
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
@@ -356,14 +373,13 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
         }
         snpnetLoggerTimeDiff("Time of prediction on validation matrix", time.val.pred.start, indent=2)
       }
-
-      # compute metric
+      # compute metric        
       if (family == "cox") {
-          metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], surv[['train']], family)
-          if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, surv[['val']], family)
+          metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], surv[['train']], configs[['metric']])
+          if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, surv[['val']], configs[['metric']])
       } else {
-          metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], response[['train']], family)
-          if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response[['val']], family)
+          metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], response[['train']], configs[['metric']])
+          if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response[['val']], configs[['metric']])
       }
 
       score <- check.obj[["score"]]
@@ -403,15 +419,12 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
     ### --- Check stopping criteria --- ####
     if (max.valid.idx == configs[['nlambda']]) break
-    if (validation && configs[['early.stopping']] && max.valid.idx > 2 && all(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx] < max(metric.val[1:(max.valid.idx-configs[['stopping.lag']])]))) {
-      snpnetLogger(paste0("Early stopped at iteration ", iter, " (Lambda idx=", which.max(metric.val), ") with validation metric: ", max(metric.val, na.rm = T), "."))
-      snpnetLogger(paste0("Previous ones: ", paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "), "."), indent=1)
-      break
-    }
-    print(gc())
+    if (validation && checkEarlyStopping(metric.val, max.valid.idx, iter, configs)) break
+  }
   }
   snpnetLoggerTimeDiff("End snpnet.", time.start)
-  print(gc())
+  if(! configs[['save']]) cleanUpIntermediateFiles(configs)
+  if(configs[['verbose']]) print(gc())
 
   out <- list(metric.train = metric.train, metric.val = metric.val, glmnet.results = glmnet.results,
               full.lams = full.lams, a0 = a0, beta = beta, configs = configs)

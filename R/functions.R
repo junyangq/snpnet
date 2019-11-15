@@ -44,6 +44,7 @@ readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotyp
     phe.master.unsorted$ID <- paste(phe.master.unsorted$FID, phe.master.unsorted$IID, sep = "_")
 
     # make sure the phe.master has the same individual ordering as in the genotype data
+    # it seemed like the code is robust enought (as of 2019/11/13) but just want to be safe
     phe.master <- phe.master.unsorted %>%
     dplyr::left_join(
         data.frame(ID = psam.ids, stringsAsFactors=F) %>%
@@ -71,7 +72,7 @@ computeStats <- function(pfile, ids, configs) {
   
       # Run plink2 --geno-counts
       system(paste(
-          'plink2', 
+          configs[['plink2.path']],
           '--threads', configs[['nCores']],
           '--memory', configs[['mem']],
           '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
@@ -114,7 +115,7 @@ computeStats <- function(pfile, ids, configs) {
 
 readBinMat <- function(fhead, configs){
     # This is a helper function to read binary matrix file (from plink2 --variant-score zs bin)
-    rows <- fread(cmd=paste0('zstdcat ', fhead, '.vars.zst'), head=F)$V1
+    rows <- fread(cmd=paste0(configs[['zstdcat.path']], ' ', fhead, '.vars.zst'), head=F)$V1
     cols <- fread(paste0(fhead, '.cols'), head=F)$V1
     bin.reader <- file(paste0(fhead, '.bin'), 'rb')
     M = matrix(
@@ -124,7 +125,7 @@ readBinMat <- function(fhead, configs){
     close(bin.reader)
     colnames(M) <- cols
     rownames(M) <- rows
-    if (! configs[['save']]) system(paste(
+    if (! configs[['save.computeProduct']]) system(paste(
         'rm', paste0(fhead, '.cols'), paste0(fhead, '.vars.zst'), 
         paste0(fhead, '.bin'), sep=' '
     ), intern=F, wait=T)
@@ -134,6 +135,9 @@ readBinMat <- function(fhead, configs){
 computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
   time.computeProduct.start <- Sys.time()
   snpnetLogger('Start computeProduct()', indent=2, log.time=time.computeProduct.start)
+
+  gc_res <- gc()
+  if(configs[['KKT.verbose']]) print(gc_res)
 
   snpnetLogger('Start plink2 --variant-score', indent=3, log.time=time.computeProduct.start)    
   dir.create(file.path(configs[['results.dir']], configs[["save.dir"]]), showWarnings = FALSE, recursive = T)
@@ -150,9 +154,9 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
         
   # Run plink2 --geno-counts
     system(paste(
-      'plink2', 
+        configs[['plink2.path']], 
         '--threads', configs[['nCores']],
-        '--memory', configs[['mem']],
+        '--memory', as.integer(configs[['mem']]) - ceiling(sum(as.matrix(gc_res)[,2])),
         '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
         '--read-freq', paste0(configs[['gcount.full.prefix']], '.gcount'),
         '--keep', residual_f,
@@ -162,7 +166,7 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
     ), intern=F, wait=T)
 
   prod.full <- readBinMat(str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
-  if (! configs[['save']]) system(paste(
+  if (! configs[['save.computeProduct']]) system(paste(
       'rm', residual_f, str_replace_all(residual_f, '.tsv$', '.log'), sep=' '
   ), intern=F, wait=T)
     
@@ -259,26 +263,70 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
   }
   out
 }
-                                 
-computeMetric <- function(pred, response, family) {
-  if ((family == "gaussian")) {
-    metric <- 1 - apply((response - pred)^2, 2, sum) / sum((response - mean(response))^2)
-  } else if (family == "binomial") {
-    metric <- apply(pred, 2, function(x) {
-      pred.obj <- ROCR::prediction(x, response)
-      auc.obj <- ROCR::performance(pred.obj, measure = 'auc' )
-      auc.obj@y.values[[1]]
-    })
-  } else if (family == "cox") {
-    d0 <- glmnet::coxnet.deviance(NULL, response)
-    metric <- apply(pred, 2, function(p) {
-      d <- glmnet::coxnet.deviance(p, response)
-      1 - d/d0
-    })  
-  } else {
-    stop(paste0('The specified family (', family, ') is not supported!'))
-  }
-  metric
+
+setDefaultMetric <- function(family){
+    if (family == "gaussian") {
+        metric <- 'r2'
+    } else if (family == "binomial") {
+        metric <- 'auc'
+    } else if (family == "cox") {
+        metric <- 'd2'
+    } else {
+        stop(paste0('The specified family (', family, ') is not supported!'))
+    }
+    metric
+}
+
+computeMetric <- function(pred, response, metric.type) {
+    if (metric.type == 'r2') {
+        metric <- 1 - apply((response - pred)^2, 2, sum) / sum((response - mean(response))^2)
+    } else if (metric.type == 'auc') {
+        metric <- apply(pred, 2, function(x) {
+            pred.obj <- ROCR::prediction(x, response)
+            auc.obj <- ROCR::performance(pred.obj, measure = 'auc')
+            auc.obj@y.values[[1]]
+        })
+    } else if (metric.type == 'd2') {
+        d0 <- glmnet::coxnet.deviance(NULL, response)
+        metric <- apply(pred, 2, function(p) {
+            d <- glmnet::coxnet.deviance(p, response)
+            1 - d/d0
+        })  
+    }
+    metric
+}
+
+checkEarlyStopping <- function(metric.val, max.valid.idx, iter, configs){
+    max.valid.idx.lag <- max.valid.idx-configs[['stopping.lag']]
+    max.val.1 <- max(metric.val[1:(max.valid.idx.lag)])
+    max.val.2 <- max(metric.val[(max.valid.idx.lag+1):max.valid.idx])    
+    if (
+        configs[['early.stopping']] &&
+        max.valid.idx > configs[['stopping.lag']] && 
+        max.val.1 > max.val.2
+    ) {
+        snpnetLogger(sprintf(
+            "Early stopped at iteration %d (Lambda idx=%d ) with validation metric: %.14f.", 
+            iter, which.max(metric.val), max(metric.val, na.rm = T)
+        ))
+        snpnetLogger(paste0(
+            "Previous ones: ", 
+            paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "), 
+            "."
+        ), indent=1)        
+        earlyStop <- TRUE
+    } else {
+        earlyStop <- FALSE
+    }
+    earlyStop
+}
+
+cleanUpIntermediateFiles <- function(configs){
+    for(subdir in c(configs[["save.dir"]], configs[["meta.dir"]])){
+        system(paste(
+            'rm', '-rf', file.path(configs[['results.dir']], subdir), sep=' '
+        ), intern=F, wait=T)
+    }
 }
 
 computeCoxgrad <- function(glmfits, time, d){
@@ -329,50 +377,60 @@ setupConfigs <- function(configs, covariates, family, results.dir) {
         early.stopping = TRUE,
         stopping.lag = 2,
         nlambda = 100, 
+        niter = 10,
         lambda.min.ratio = NULL,
         glmnet.thresh = 1E-7,
         KKT.verbose = FALSE,
         use.glmnetPlus = NULL,
-        save = FALSE, 
+        save = FALSE,
+        save.computeProduct = FALSE,
         prevIter = 0, 
+        results.dir = NULL,
         meta.dir = 'meta',
         save.dir = 'results',
         verbose = FALSE,
         KKT.check.aggressive.experimental = FALSE,
         gcount.basename.prefix = 'snpnet.train',
         gcount.full.prefix=NULL,
-        endian="little"
+        endian="little",
+        metric=NULL,
+        plink2.path='plink2',
+        zstdcat.path='zstdcat'
     )
     out <- defaults    
     
     # update the defaults with the specified parameters
-    for(name in names(configs)){
+    for(name in intersect(names(defaults), names(configs))){
         out[[name]] <- configs[[name]]
     }
     # store additional params
     out[['covariates']] <- covariates
     out[['family']] <- family
-    out[['results.dir']] <- results.dir
     
     # update settings
     out[["early.stopping"]] <- ifelse(out[["early.stopping"]], out[['stopping.lag']], -1)
     if(is.null(out[['increase.size']]))  out[['increase.size']] <- out[['num.snps.batch']]/2
     out[['use.glmnetPlus']] <- checkGlmnetPlus(out[['use.glmnetPlus']], family)
+        
+    if (is.null(out[['metric']])) out[['metric']] <- setDefaultMetric(family)
     
+    # We will write some intermediate files to meta.dir and save.dir.
+    # those files will be deleted with snpnet::cleanUpIntermediateFiles() function.
+    if (is.null(out[['results.dir']])) out[['results.dir']] <- tempdir(check = TRUE)
+    dir.create(file.path(out[['results.dir']], out[["meta.dir"]]), showWarnings = FALSE, recursive = T)
+    dir.create(file.path(out[['results.dir']], out[["save.dir"]]), showWarnings = FALSE, recursive = T)
     if(is.null(out[['gcount.full.prefix']])) out[['gcount.full.prefix']] <- file.path(
         out[['results.dir']], out[["meta.dir"]], out['gcount.basename.prefix']
     )
-        
-    if (out[['save']]) {
-        dir.create(file.path(results.dir, out[["meta.dir"]]), showWarnings = FALSE, recursive = T)
-        dir.create(file.path(results.dir, out[["save.dir"]]), showWarnings = FALSE, recursive = T)
-    }
+    
     out
 }
+                                 
+## logger functions
 
-snpnetLogger <- function(message, log.time = NULL, indent=0){
+snpnetLogger <- function(message, log.time = NULL, indent=0, funcname='snpnet'){
     if (is.null(log.time)) log.time <- Sys.time()
-    cat('[', as.character(log.time), ' snpnet] ', rep(' ', indent * 2), message, '\n', sep='')
+    cat('[', as.character(log.time), ' ', funcname, '] ', rep(' ', indent * 2), message, '\n', sep='')
 }
 
 timeDiff <- function(start.time, end.time = NULL) {
@@ -384,4 +442,3 @@ snpnetLoggerTimeDiff <- function(message, start.time, end.time = NULL, indent=0)
     if (is.null(end.time)) end.time <- Sys.time()
     snpnetLogger(paste(message, "Time elapsed:", timeDiff(start.time, end.time), sep=' '), log.time=end.time, indent=indent)
 }
-
