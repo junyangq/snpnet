@@ -270,7 +270,7 @@ setDefaultMetric <- function(family){
     } else if (family == "binomial") {
         metric <- 'auc'
     } else if (family == "cox") {
-        metric <- 'd2'
+        metric <- 'C'
     } else {
         stop(paste0('The specified family (', family, ') is not supported!'))
     }
@@ -292,6 +292,10 @@ computeMetric <- function(pred, response, metric.type) {
             d <- glmnet::coxnet.deviance(p, response)
             1 - d/d0
         })  
+    } else if (metric.type == 'C'){
+      metric <- apply(pred, 2, function(p) {
+        my.cindex(p, response[,1], response[,2])
+      })
     }
     metric
 }
@@ -330,7 +334,7 @@ cleanUpIntermediateFiles <- function(configs){
 }
 
 computeCoxgrad <- function(glmfits, time, d){
-    apply(glmfits, 2, function(f){coxgrad(f,time,d,w=rep(1,length(f)),eps=0.00001)})
+    apply(glmfits, 2, function(f){coxgrad(f,time,d,w=rep(1,length(f)))})
 }
 
 simplifyList_Col <- function(x) {
@@ -342,7 +346,33 @@ simplifyList_Col <- function(x) {
   }
   return(x)
 }
-
+                                 
+my.cindex=function(yhat,y,status,w=rep(1,length(y))){
+# Rob's implementation of C-index
+#note:  this function gives identical results to the summary function from coxph, and the concordance.index function in survcomp.
+#  (with their default settings), and no ties in yhat. Works with ties in y. But does not agree with latter when yhat has ties. There are conflicting definitions for c-index in this case
+#
+#formula used  is 
+#  Concordance = (#all concordant pairs + #tied pairs/2)/(#total pairs including ties).
+  # with w,  weights used are ave wts for each pair
+  risksets=which(status==1)
+  w=length(w)*w/sum(w)
+  fun=function(riskset,y,yhat,w){
+    total=concordant=0
+    i=riskset
+    rest=which(y>y[i])
+    if(length(rest)>0){
+      ww=(w[rest]+w[i])/2
+      total=sum(ww)
+      concordant = 1.0*sum(ww*(yhat[rest]<yhat[i]))+0.5*sum(ww*(yhat[rest]==yhat[i]))
+    }
+    return(c(concordant,total))
+  }
+  out=sapply(risksets,fun,y,yhat,w)
+  cindex=sum(out[1,])/sum(out[2,]) 
+  return(cindex)
+}
+                                 
 checkGlmnetPlus <- function(use.glmnetPlus, family) {
     if (!requireNamespace("glmnet") && !requireNamespace("glmnetPlus"))
         stop("Please install at least glmnet or glmnetPlus.")

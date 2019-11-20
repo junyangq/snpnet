@@ -1,10 +1,10 @@
-coxgrad=function(f,time,d,w,eps=0.00001){
+coxgrad_t=function(f,time,d,w,eps=0.00001){
 ### f is fitted function from glmnet at a particular lambda
 ### time is death or censoring time
 ### d is death indicator; d=0 means censored, d=1 means death
 ### w is a weight vector of non-negative weights, which will be normalized to sum to 1
     if(missing(w))w=rep(1,length(f))
-    w=w/sum(w)
+    #w=w/sum(w)
     f=scale(f,TRUE,FALSE)#center f so exponents are not too large
     time=time-d*eps#break ties between death times and non death times, leaving tied death times tied
     o=order(time)
@@ -61,4 +61,22 @@ fid=function(x,index){
         list(index_first=index_first,index_ties=index_ties[nties>1])
         }
     }
+  
+# Use this shorter version 
+coxgrad <- function(f, time, d, w){
+  if(missing(w))w=rep(1,length(f))
+  d = d * w
+  f=scale(f,TRUE,FALSE)
+  o = order(time)
+  ordered_time = time[o]
+  r = rank(ordered_time, ties.method="min")
+  rm = rank(ordered_time, ties.method="max")
+  ef=(w * exp(f))[o]
+  rskden=rev(cumsum(rev(ef)))[r]
+  grad =  cumsum(d[o]/rskden)[rm]
+  grad[o] = d[o] -  ef * grad
+  grad
+}
 
+
+  

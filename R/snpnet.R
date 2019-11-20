@@ -78,6 +78,7 @@
 #' @export
 snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL, covariates = NULL, 
                    split.col=NULL, family = NULL, configs=NULL) {
+  print("Ruilin's version here!")
   validation <- (!is.null(split.col))
   if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
   time.start <- Sys.time()
