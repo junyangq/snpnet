@@ -355,6 +355,10 @@ my.cindex=function(yhat,y,status,w=rep(1,length(y))){
 #formula used  is 
 #  Concordance = (#all concordant pairs + #tied pairs/2)/(#total pairs including ties).
   # with w,  weights used are ave wts for each pair
+  
+  time.computeC.start <- Sys.time()
+  snpnetLogger('Start my.cindex()', indent=2, log.time=time.computeC.start)
+  
   risksets=which(status==1)
   w=length(w)*w/sum(w)
   fun=function(riskset,y,yhat,w){
@@ -369,7 +373,9 @@ my.cindex=function(yhat,y,status,w=rep(1,length(y))){
     return(c(concordant,total))
   }
   out=sapply(risksets,fun,y,yhat,w)
-  cindex=sum(out[1,])/sum(out[2,]) 
+  cindex=sum(out[1,])/sum(out[2,])
+  
+  snpnetLoggerTimeDiff('End my.cindex().', time.computeC.start, indent=3)
   return(cindex)
 }
                                  
