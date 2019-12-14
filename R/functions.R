@@ -294,7 +294,7 @@ computeMetric <- function(pred, response, metric.type) {
         })  
     } else if (metric.type == 'C'){
       metric <- apply(pred, 2, function(p) {
-        my.cindex(p, response[,1], response[,2])
+        cindex::CIndex(p, response[,1], response[,2])
       })
     }
     metric
