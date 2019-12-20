@@ -135,6 +135,11 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
           warning(paste0("Missing phenotype entry (", phenotype, ") in ", s, " set for: ", utils::head(check.missing, 5), " ...\n"))
       }
   }
+  
+  # focus on individuals with non-missing values.
+  for(s in splits){
+    ids[[s]] <- intersect(ids[[s]], phe.no.missing.IDs)
+  }  
 
   ### --- Prepare the feature matrix --- ###
   features <- list()  
