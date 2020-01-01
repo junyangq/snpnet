@@ -298,14 +298,24 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       } else {
         beta0 <- prev.beta
       }
-      glmfit <- glmnetPlus::glmnet(
-          features[['train']], response[['train']], family = family,
-          lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
-          standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']],
-          type.gaussian = "naive", beta0 = beta0
+      if(family == "cox"){
+        glmfit <- glmnetPlus::glmnet(
+                features[['train']], surv[['train']], family = family,
+                lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
+                standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], beta0 = beta0
+            )
+        pred.train <- stats::predict(glmfit, newx = features[['train']])
+        residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
+      } else {
+        glmfit <- glmnetPlus::glmnet(
+        features[['train']], response[['train']], family = family,
+        lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
+        standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']],
+        type.gaussian = "naive", beta0 = beta0
       )
       residual <- glmfit$residuals
       pred.train <- response[['train']] - residual
+      }
         
     } else {
         start.lams <- 1

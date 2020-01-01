@@ -388,9 +388,6 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
         if (!requireNamespace("glmnetPlus")) {
             warning("use.glmnetPlus was set to TRUE but glmnetPlus not found... Revert back to glmnet.")
             use.glmnetPlus <- FALSE
-        } else if (family != "gaussian") {
-            warning("glmnetPlus currently does not support non-gaussian family... Revert back to glmnet.")
-            use.glmnetPlus <- FALSE
         }
     }
     use.glmnetPlus
