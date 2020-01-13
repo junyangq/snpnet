@@ -78,13 +78,15 @@
 #' @export
 snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL, covariates = NULL, 
                    split.col=NULL, family = NULL, configs=NULL) {
+
+  need.rank <- configs[['rank']]
   validation <- (!is.null(split.col))
   if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
   time.start <- Sys.time()
   snpnetLogger('Start snpnet', log.time = time.start)
     
   snpnetLogger('Preprocessing start..')
-
+    
   ### --- Read genotype IDs --- ###
   ids <- list(); phe <- list()
   ids[['all']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))    
@@ -169,6 +171,14 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     
   stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
     
+  ### --- Keep track of ranking of selected variables, if required --- ###
+  if (need.rank){
+    var.rank <- rep(configs[['nlambda']]+1, length(vars))
+    names(var.rank) <- vars
+  } else{
+    var.rank = NULL
+  }
+
   ### --- End --- ###
   snpnetLoggerTimeDiff("Preprocessing end.", time.start, indent=1)
 
@@ -202,6 +212,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     lambda.idx <- 1
     num.lams <- configs[["nlams.init"]]
     features.to.keep <- names(glmmod$coefficients[-1])
+
     prev.beta <- NULL
     num.new.valid <- NULL  # track number of new valid solutions every iteration, to adjust length of current lambda seq or size of additional variables
 
@@ -276,6 +287,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       snpnetLogger(paste0("- # newly added variables: ", length(features.to.add), "."), indent=2)
       snpnetLogger(paste0("- Total # variables in the strong set: ", ncol(features[['train']]), "."), indent=2)
     }
+      
     ### --- Fit glmnet --- ###
     if (configs[['verbose']]){
         if(configs[['use.glmnetPlus']]){
@@ -358,6 +370,17 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
+
+    # Update the lambda index of variants added
+    if (need.rank && check.obj[["max.valid.idx"]] > 0){
+      tmp <- 1
+      for (lam.idx in start.lams:max.valid.idx){       
+       current_active <- setdiff(names(which(glmfit$beta[, tmp] != 0)), covariates)
+       tmp <- tmp + 1
+       var.rank[current_active] = pmin(var.rank[current_active], lam.idx)
+     } 
+    }
+      
     if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
@@ -437,6 +460,6 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   if(configs[['verbose']]) print(gc())
 
   out <- list(metric.train = metric.train, metric.val = metric.val, glmnet.results = glmnet.results,
-              full.lams = full.lams, a0 = a0, beta = beta, configs = configs)
+              full.lams = full.lams, a0 = a0, beta = beta, configs = configs, var.rank=var.rank)
   out
 }
