@@ -183,10 +183,15 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
   prod.full
 }
 
-KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, iter) {
+KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, iter, p.factor=NULL) {
   time.KKT.check.start <- Sys.time()
   if (configs[['KKT.verbose']]) snpnetLogger('Start KKT.check()', indent=1, log.time=time.KKT.check.start)
   prod.full <- computeProduct(residual, pfile, vars, stats, configs, iter) / n.train
+  
+  if(!is.null(p.factor)){
+    prod.full <- sweep(prod.full, 1, p.factor, FUN="/")
+  }
+    
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- computeProduct.', indent=2, start.time=time.KKT.check.start)
   num.lams <- length(current.lams)
   if (length(configs[["covariates"]]) > 0) {

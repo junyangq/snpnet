@@ -77,7 +77,7 @@
 #' @useDynLib snpnet, .registration=TRUE
 #' @export
 snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL, covariates = NULL, 
-                   split.col=NULL, family = NULL, configs=NULL) {
+                   split.col=NULL, family = NULL, p.factor=NULL, configs=NULL) {
 
   need.rank <- configs[['rank']]
   validation <- (!is.null(split.col))
@@ -171,7 +171,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     
   stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
     
-  ### --- Keep track of ranking of selected variables, if required --- ###
+  ### --- Keep track of the lambda index at which each variant is first added to the model, if required --- ###
   if (need.rank){
     var.rank <- rep(configs[['nlambda']]+1, length(vars))
     names(var.rank) <- vars
@@ -202,6 +202,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
     prod.full <- computeProduct(residual, genotype.pfile, vars, stats, configs, iter=0) / nrow(phe[['train']])
     score <- abs(prod.full[, 1])
+
+    if (!is.null(p.factor)){score <- score/p.factor[names(score)]} # Divide the score by the penalty factor
+      
     if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
 
     if (is.null(configs[['lambda.min.ratio']])) {
@@ -264,6 +267,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       which.in.model <- which(names(score) %in% colnames(features[['train']]))
       score[which.in.model] <- NA
     }
+    if (!is.null(p.factor)) {score <- score/p.factor[names(score)]} 
     sorted.score <- sort(score, decreasing = T, na.last = NA)
     if (length(sorted.score) > 0) {
       features.to.add <- names(sorted.score)[1:min(configs[['num.snps.batch']], length(sorted.score))]
@@ -296,8 +300,12 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
             snpnetLogger("Start fitting Glmnet ...", indent=1)
         }
     }
-    penalty.factor <- rep(1, ncol(features[['train']]))
-    penalty.factor[seq_len(length(covariates))] <- 0
+    if (is.null(p.factor)){
+      penalty.factor <- rep(1, ncol(features[['train']]))
+      penalty.factor[seq_len(length(covariates))] <- 0      
+    } else {
+      penalty.factor <- c(rep(0, length(covariates)), p.factor[colnames(features[['train']])[-(1:length(covariates))]])
+    }
     current.lams <- full.lams[1:num.lams]
     current.lams.adjusted <- full.lams[1:num.lams] * sum(penalty.factor) / length(penalty.factor)  # adjustment to counteract penalty factor normalization in glmnet
     time.glmnet.start <- Sys.time()
@@ -364,7 +372,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     check.obj <- KKT.check(
         residual, genotype.pfile, vars, nrow(phe[['train']]),
         current.lams[start.lams:num.lams], ifelse(configs[['use.glmnetPlus']], 1, lambda.idx),
-        stats, glmfit, configs, iter
+        stats, glmfit, configs, iter, p.factor
     )
     snpnetLogger("KKT check obj done ...", indent=1)
 
