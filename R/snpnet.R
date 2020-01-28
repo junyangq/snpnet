@@ -137,6 +137,11 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
           warning(paste0("Missing phenotype entry (", phenotype, ") in ", s, " set for: ", utils::head(check.missing, 5), " ...\n"))
       }
   }
+  
+  # focus on individuals with non-missing values.
+  for(s in splits){
+    ids[[s]] <- intersect(ids[[s]], phe.no.missing.IDs)
+  }  
 
   ### --- Prepare the feature matrix --- ###
   features <- list()  
@@ -247,6 +252,8 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     earlyStopNow <- (validation && checkEarlyStopping(metric.val, max.valid.idx, configs[['prevIter']], configs))
   }
   cat("\n")
+# end of pre-processing
+
   if(! earlyStopNow){
   for (iter in (configs[['prevIter']]+1):configs[['niter']]) {
     time.iter.start <- Sys.time()
@@ -375,8 +382,6 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
         stats, glmfit, configs, iter, p.factor
     )
     snpnetLogger("KKT check obj done ...", indent=1)
-
-    lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
 
     # Update the lambda index of variants added
@@ -389,7 +394,16 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
      } 
     }
       
-    if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
+
+      if (lambda.idx < max.valid.idx) {
+        is.KKT.valid.for.at.least.one <- TRUE
+    } else{
+        is.KKT.valid.for.at.least.one <- FALSE
+    }
+    lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
+
+
+      if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
     }
@@ -398,7 +412,10 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     } else {
       num.new.valid[iter] <- check.obj[["max.valid.idx"]] - ifelse(iter > 1, num.new.valid[iter-1], 0)
     }
-    if (check.obj[["max.valid.idx"]] > 0) {
+    if (!is.KKT.valid.for.at.least.one) {
+      features.to.keep <- union(features.to.keep, features.to.add)
+      increase.snp.size <- TRUE
+    } else {
       for (j in 1:check.obj[["max.valid.idx"]]) {
         a0[[j + (start.lams - 1)]] <- as.numeric(glmfit$a0[j])
         beta[[j + (start.lams - 1)]] <- glmfit$beta[, j]
@@ -427,10 +444,8 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       is.ever.active <- apply(glmfit$beta[, 1:check.obj[["max.valid.idx"]], drop = F], 1, function(x) any(x != 0))
       features.to.keep <- union(rownames(glmfit$beta)[is.ever.active], features.to.keep)
       increase.snp.size <- FALSE
-    } else if (check.obj[["max.valid.idx"]] == 0) {
-      features.to.keep <- union(features.to.keep, features.to.add)
-      increase.snp.size <- TRUE
     }
+
     if (configs[['verbose']]) snpnetLoggerTimeDiff("End checking KKT condition.", time.KKT.start, indent=2)
 
     if (configs[['save']]) {
