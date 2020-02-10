@@ -1,17 +1,18 @@
 Package: snpnet
-Version: 0.2.0
+Version: 0.3.0
 Type: Package
 Title: snpnet: Efficient Lasso Solver for Large SNP Data
 Authors@R: c(
     person("Junyang", "Qian", email = "junyangq@stanford.edu", role = c("aut", "cre")),
     person("Trevor", "Hastie", email = "hastie@stanford.edu", role = c("aut")),
-    person("Yosuke", "Tanigawa", email = "ytanigaw@stanford.edu", role = c("ctb"))
+    person("Yosuke", "Tanigawa", email = "ytanigaw@stanford.edu", role = c("ctb")),
+    person("Ruilin", "Li", email = "ruilinli@stanford.edu", role = c("ctb"))
     )
 Description: Fitting the entire lasso solution path on large-scale genotype-phenotype data.
 License: GPL-2
 Encoding: UTF-8
 LazyData: true
-Imports: ROCR, Rcpp, crochet, utils, stats, data.table, methods, cindex
+Imports: ROCR, Rcpp, crochet, utils, stats, data.table, methods, cindex, glmnet (>= 3.0.2)
 LinkingTo: Rcpp, BH
 Depends: R (>= 3.0.0)
 RoxygenNote: 6.0.1
