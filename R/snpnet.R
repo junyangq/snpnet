@@ -69,12 +69,12 @@
 #'                              Default is half of the batch size.}
 #'                 \item{plink2.path}{the user-specified path to plink2 (default: plink2)}
 #'                 \item{zstdcat.path}{the user-specified path to zstdcat (default: zstdcat)}
+#'                 \item{rank}{if TRUE, then the smallest lambda indices when each variable enters the model are recorded}
 #'                }
 #' @return A list containing the solution path, the metric evaluated on training/validation set and others.
 #'
 #' @importFrom data.table ':='
 #'
-#' @useDynLib snpnet, .registration=TRUE
 #' @export
 snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL, covariates = NULL, 
                    split.col=NULL, family = NULL, p.factor=NULL, configs=NULL) {
