@@ -1,4 +1,6 @@
 #' @importFrom data.table set as.data.table
+#' @importFrom magrittr %>%
+#' @importFrom dplyr n
 prepareFeatures <- function(pgen, vars, names, stat) {
   buf <- pgenlibr::ReadList(pgen, match(names, vars), meanimpute=F)
   features.add <- as.data.table(buf)
