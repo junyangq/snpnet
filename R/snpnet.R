@@ -69,23 +69,24 @@
 #'                              Default is half of the batch size.}
 #'                 \item{plink2.path}{the user-specified path to plink2 (default: plink2)}
 #'                 \item{zstdcat.path}{the user-specified path to zstdcat (default: zstdcat)}
+#'                 \item{rank}{if TRUE, then the smallest lambda indices when each variable enters the model are recorded}
 #'                }
 #' @return A list containing the solution path, the metric evaluated on training/validation set and others.
 #'
 #' @importFrom data.table ':='
 #'
-#' @useDynLib snpnet, .registration=TRUE
 #' @export
 snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL, covariates = NULL, 
-                   split.col=NULL, family = NULL, configs=NULL) {
-  print("Ruilin's version here!")
+                   split.col=NULL, family = NULL, p.factor=NULL, configs=NULL) {
+
+  need.rank <- configs[['rank']]
   validation <- (!is.null(split.col))
   if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
   time.start <- Sys.time()
   snpnetLogger('Start snpnet', log.time = time.start)
     
   snpnetLogger('Preprocessing start..')
-
+    
   ### --- Read genotype IDs --- ###
   ids <- list(); phe <- list()
   ids[['all']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))    
@@ -175,6 +176,14 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     
   stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
     
+  ### --- Keep track of the lambda index at which each variant is first added to the model, if required --- ###
+  if (need.rank){
+    var.rank <- rep(configs[['nlambda']]+1, length(vars))
+    names(var.rank) <- vars
+  } else{
+    var.rank = NULL
+  }
+
   ### --- End --- ###
   snpnetLoggerTimeDiff("Preprocessing end.", time.start, indent=1)
 
@@ -198,6 +207,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
     prod.full <- computeProduct(residual, genotype.pfile, vars, stats, configs, iter=0) / nrow(phe[['train']])
     score <- abs(prod.full[, 1])
+
+    if (!is.null(p.factor)){score <- score/p.factor[names(score)]} # Divide the score by the penalty factor
+      
     if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
 
     if (is.null(configs[['lambda.min.ratio']])) {
@@ -208,6 +220,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     lambda.idx <- 1
     num.lams <- configs[["nlams.init"]]
     features.to.keep <- names(glmmod$coefficients[-1])
+
     prev.beta <- NULL
     num.new.valid <- NULL  # track number of new valid solutions every iteration, to adjust length of current lambda seq or size of additional variables
 
@@ -261,6 +274,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       which.in.model <- which(names(score) %in% colnames(features[['train']]))
       score[which.in.model] <- NA
     }
+    if (!is.null(p.factor)) {score <- score/p.factor[names(score)]} 
     sorted.score <- sort(score, decreasing = T, na.last = NA)
     if (length(sorted.score) > 0) {
       features.to.add <- names(sorted.score)[1:min(configs[['num.snps.batch']], length(sorted.score))]
@@ -284,6 +298,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       snpnetLogger(paste0("- # newly added variables: ", length(features.to.add), "."), indent=2)
       snpnetLogger(paste0("- Total # variables in the strong set: ", ncol(features[['train']]), "."), indent=2)
     }
+      
     ### --- Fit glmnet --- ###
     if (configs[['verbose']]){
         if(configs[['use.glmnetPlus']]){
@@ -292,8 +307,12 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
             snpnetLogger("Start fitting Glmnet ...", indent=1)
         }
     }
-    penalty.factor <- rep(1, ncol(features[['train']]))
-    penalty.factor[seq_len(length(covariates))] <- 0
+    if (is.null(p.factor)){
+      penalty.factor <- rep(1, ncol(features[['train']]))
+      penalty.factor[seq_len(length(covariates))] <- 0      
+    } else {
+      penalty.factor <- c(rep(0, length(covariates)), p.factor[colnames(features[['train']])[-(1:length(covariates))]])
+    }
     current.lams <- full.lams[1:num.lams]
     current.lams.adjusted <- full.lams[1:num.lams] * sum(penalty.factor) / length(penalty.factor)  # adjustment to counteract penalty factor normalization in glmnet
     time.glmnet.start <- Sys.time()
@@ -306,14 +325,24 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       } else {
         beta0 <- prev.beta
       }
-      glmfit <- glmnetPlus::glmnet(
-          features[['train']], response[['train']], family = family,
-          lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
-          standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']],
-          type.gaussian = "naive", beta0 = beta0
+      if(family == "cox"){
+        glmfit <- glmnetPlus::glmnet(
+                features[['train']], surv[['train']], family = family,
+                lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
+                standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], beta0 = beta0
+            )
+        pred.train <- stats::predict(glmfit, newx = features[['train']])
+        residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
+      } else {
+        glmfit <- glmnetPlus::glmnet(
+        features[['train']], response[['train']], family = family,
+        lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
+        standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']],
+        type.gaussian = "naive", beta0 = beta0
       )
       residual <- glmfit$residuals
       pred.train <- response[['train']] - residual
+      }
         
     } else {
         start.lams <- 1
@@ -349,20 +378,32 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
     check.obj <- KKT.check(
         residual, genotype.pfile, vars, nrow(phe[['train']]),
-        current.lams[start.lams:num.lams],
-        ifelse(configs[['use.glmnetPlus']], 1, lambda.idx),
-        stats, glmfit, configs, iter
+        current.lams[start.lams:num.lams], ifelse(configs[['use.glmnetPlus']], 1, lambda.idx),
+        stats, glmfit, configs, iter, p.factor
     )
     snpnetLogger("KKT check obj done ...", indent=1)
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
-    if (lambda.idx < max.valid.idx) {
+
+    # Update the lambda index of variants added
+    if (need.rank && check.obj[["max.valid.idx"]] > 0){
+      tmp <- 1
+      for (lam.idx in start.lams:max.valid.idx){       
+       current_active <- setdiff(names(which(glmfit$beta[, tmp] != 0)), covariates)
+       tmp <- tmp + 1
+       var.rank[current_active] = pmin(var.rank[current_active], lam.idx)
+     } 
+    }
+      
+
+      if (lambda.idx < max.valid.idx) {
         is.KKT.valid.for.at.least.one <- TRUE
     } else{
         is.KKT.valid.for.at.least.one <- FALSE
     }
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
 
-    if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
+
+      if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
     }
@@ -442,6 +483,6 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   if(configs[['verbose']]) print(gc())
 
   out <- list(metric.train = metric.train, metric.val = metric.val, glmnet.results = glmnet.results,
-              full.lams = full.lams, a0 = a0, beta = beta, configs = configs)
+              full.lams = full.lams, a0 = a0, beta = beta, configs = configs, var.rank=var.rank)
   out
 }

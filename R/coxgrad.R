@@ -63,8 +63,9 @@ fid=function(x,index){
     }
   
 # Use this shorter version 
-coxgrad <- function(f, time, d, w){
+coxgrad <- function(f, time, d, w, eps=0.00001){
   if(missing(w))w=rep(1,length(f))
+  time = time - d*eps
   d = d * w
   f=scale(f,TRUE,FALSE)
   o = order(time)
