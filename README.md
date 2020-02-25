@@ -13,6 +13,7 @@ Most of the requirements of snpnet are available from CRAN. To install the cinde
 library(devtools)
 install_github("junyangq/glmnetPlus")
 install_github("chrchang/plink-ng", subdir="/2.0/cindex")
+install_github("chrchang/plink-ng", subdir="/2.0/pgenlibr")
 ```
 
 Install plink2 from here https://www.cog-genomics.org/plink/2.0/
