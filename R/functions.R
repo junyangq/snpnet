@@ -69,8 +69,8 @@ computeStats <- function(pfile, ids, configs) {
   } else {      
       # To run plink2 --geno-counts, we write the list of IDs to a file
       data.frame(ID = ids) %>%
-      separate(ID, into=c('FID', 'IID'), sep='_') %>% 
-      fwrite(keep_f, sep='\t', col.names=F)
+      tidyr::separate(ID, into=c('FID', 'IID'), sep='_') %>% 
+      data.table::fwrite(keep_f, sep='\t', col.names=F)
   
       # Run plink2 --geno-counts
       system(paste(
@@ -87,7 +87,7 @@ computeStats <- function(pfile, ids, configs) {
       # read the gcount file
       gcount_df <-
         data.table::fread(paste0(configs[['gcount.full.prefix']], '.gcount')) %>%
-        rename(original_ID = ID) %>%
+        dplyr::rename(original_ID = ID) %>%
         mutate(
           ID = paste0(original_ID, '_', ALT),
           stats_pNAs  = MISSING_CT / (MISSING_CT + OBS_CT),
@@ -108,7 +108,7 @@ computeStats <- function(pfile, ids, configs) {
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
     
   if (configs[['save']]){
-      gcount_df %>% fwrite(gcount_tsv_f, sep='\t')
+      gcount_df %>% data.table::fwrite(gcount_tsv_f, sep='\t')
       saveRDS(out[["excludeSNP"]], file = file.path(dirname(configs[['gcount.full.prefix']]), "excludeSNP.rda"))
   }
 
@@ -150,9 +150,9 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
   residual_df <- data.frame(residual)
   colnames(residual_df) <- paste0('lambda_idx_', colnames(residual))
   residual_df %>%    
-    rownames_to_column("ID") %>%
-    separate(ID, into=c('#FID', 'IID'), sep='_') %>% 
-    fwrite(residual_f, sep='\t', col.names=T)
+    tibble::rownames_to_column("ID") %>%
+    tidyr::separate(ID, into=c('#FID', 'IID'), sep='_') %>% 
+    data.table::fwrite(residual_f, sep='\t', col.names=T)
         
   # Run plink2 --geno-counts
     system(paste(
@@ -162,14 +162,14 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
         '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
         '--read-freq', paste0(configs[['gcount.full.prefix']], '.gcount'),
         '--keep', residual_f,
-        '--out', str_replace_all(residual_f, '.tsv$', ''),
+        '--out', stringr::str_replace_all(residual_f, '.tsv$', ''),
         '--variant-score', residual_f, 'zs', 'bin', 
         sep=' '
     ), intern=F, wait=T)
 
-  prod.full <- readBinMat(str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
+  prod.full <- readBinMat(stringr::str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
   if (! configs[['save.computeProduct']]) system(paste(
-      'rm', residual_f, str_replace_all(residual_f, '.tsv$', '.log'), sep=' '
+      'rm', residual_f, stringr::str_replace_all(residual_f, '.tsv$', '.log'), sep=' '
   ), intern=F, wait=T)
     
   snpnetLoggerTimeDiff('End plink2 --variant-score.', time.computeProduct.start, indent=4)
@@ -355,37 +355,6 @@ simplifyList_Col <- function(x) {
   return(x)
 }
                                  
-my.cindex=function(yhat,y,status,w=rep(1,length(y))){
-# Rob's implementation of C-index
-#note:  this function gives identical results to the summary function from coxph, and the concordance.index function in survcomp.
-#  (with their default settings), and no ties in yhat. Works with ties in y. But does not agree with latter when yhat has ties. There are conflicting definitions for c-index in this case
-#
-#formula used  is 
-#  Concordance = (#all concordant pairs + #tied pairs/2)/(#total pairs including ties).
-  # with w,  weights used are ave wts for each pair
-  
-  time.computeC.start <- Sys.time()
-  snpnetLogger('Start my.cindex()', indent=2, log.time=time.computeC.start)
-  
-  risksets=which(status==1)
-  w=length(w)*w/sum(w)
-  fun=function(riskset,y,yhat,w){
-    total=concordant=0
-    i=riskset
-    rest=which(y>y[i])
-    if(length(rest)>0){
-      ww=(w[rest]+w[i])/2
-      total=sum(ww)
-      concordant = 1.0*sum(ww*(yhat[rest]<yhat[i]))+0.5*sum(ww*(yhat[rest]==yhat[i]))
-    }
-    return(c(concordant,total))
-  }
-  out=sapply(risksets,fun,y,yhat,w)
-  cindex=sum(out[1,])/sum(out[2,])
-  
-  snpnetLoggerTimeDiff('End my.cindex().', time.computeC.start, indent=3)
-  return(cindex)
-}
                                  
 checkGlmnetPlus <- function(use.glmnetPlus, family) {
     if (!requireNamespace("glmnet") && !requireNamespace("glmnetPlus"))
