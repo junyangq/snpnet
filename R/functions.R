@@ -65,7 +65,7 @@ computeStats <- function(pfile, ids, configs) {
 
   dir.create(dirname(configs[['gcount.full.prefix']]), showWarnings = FALSE, recursive = TRUE)
   if (file.exists(gcount_tsv_f)) {
-      gcount_df <- fread(gcount_tsv_f)
+      gcount_df <- data.table::fread(gcount_tsv_f)
   } else {      
       # To run plink2 --geno-counts, we write the list of IDs to a file
       data.frame(ID = ids) %>%
@@ -88,7 +88,7 @@ computeStats <- function(pfile, ids, configs) {
       gcount_df <-
         data.table::fread(paste0(configs[['gcount.full.prefix']], '.gcount')) %>%
         dplyr::rename(original_ID = ID) %>%
-        mutate(
+        dplyr::mutate(
           ID = paste0(original_ID, '_', ALT),
           stats_pNAs  = MISSING_CT / (MISSING_CT + OBS_CT),
           stats_means = (HAP_ALT_CTS + HET_REF_ALT_CTS + 2 * TWO_ALT_GENO_CTS ) / OBS_CT,
@@ -98,12 +98,12 @@ computeStats <- function(pfile, ids, configs) {
   }
     
   out <- list()
-  out[["pnas"]]  <- gcount_df %>% select(stats_pNAs) %>% pull()
-  out[["means"]] <- gcount_df %>% select(stats_means) %>% pull()
-  out[["sds"]]   <- gcount_df %>% select(stats_SDs) %>% pull()
+  out[["pnas"]]  <- gcount_df %>% dplyr::select(stats_pNAs) %>% dplyr::pull()
+  out[["means"]] <- gcount_df %>% dplyr::select(stats_means) %>% dplyr::pull()
+  out[["sds"]]   <- gcount_df %>% dplyr::select(stats_SDs) %>% dplyr::pull()
 
   for(key in names(out)){
-    names(out[[key]]) <- gcount_df %>% select(ID) %>% pull()
+    names(out[[key]]) <- gcount_df %>% dplyr::select(ID) %>% dplyr::pull()
   }    
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
     
@@ -117,8 +117,8 @@ computeStats <- function(pfile, ids, configs) {
 
 readBinMat <- function(fhead, configs){
     # This is a helper function to read binary matrix file (from plink2 --variant-score zs bin)
-    rows <- fread(cmd=paste0(configs[['zstdcat.path']], ' ', fhead, '.vars.zst'), head=F)$V1
-    cols <- fread(paste0(fhead, '.cols'), head=F)$V1
+    rows <- data.table::fread(cmd=paste0(configs[['zstdcat.path']], ' ', fhead, '.vars.zst'), head=F)$V1
+    cols <- data.table::fread(paste0(fhead, '.cols'), head=F)$V1
     bin.reader <- file(paste0(fhead, '.bin'), 'rb')
     M = matrix(
         readBin(bin.reader, 'double', n=length(rows)*length(cols), endian = configs[['endian']]),
