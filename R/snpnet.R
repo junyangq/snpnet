@@ -173,9 +173,6 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   ### --- End --- ###
   snpnetLoggerTimeDiff("Preprocessing end.", time.start, indent=1)
 
-  debug_data_dir <- '/oak/stanford/groups/mrivas/users/ytanigaw/sandbox/20200224_snpnet'
-  save(phe, covariates, phenotype, family, file = file.path(debug_data_dir, paste('debug1_NA', phenotype, 'RData', sep='.')))
-
   if (configs[['prevIter']] == 0) {
     snpnetLogger("Iteration 0")
     if (family == "cox"){
@@ -428,27 +425,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
           if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, surv[['val']], configs[['metric']])
       } else {
           snpnetLogger('metric train')
-          debug.pred <- pred.train[, 1:check.obj[["max.valid.idx"]], drop = F]
-          debug.response <- response[['train']]
-          debug.metric.type <- configs[['metric']]
-          save(
-            debug.pred,
-            debug.response,
-            debug.metric.type,
-            file = file.path(debug_data_dir, paste('debug2_metric.train', phenotype, 'RData', sep='.'))
-          )
           metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], response[['train']], configs[['metric']])
           if (validation){
               snpnetLogger('metric val.')
-              debug.pred <- pred.val
-              debug.response <- response[['val']]
-              debug.metric.type <- configs[['metric']]
-              save(
-                debug.pred,
-                debug.response,
-                debug.metric.type,
-                file = file.path(debug_data_dir, paste('debug2_metric.val', phenotype, 'RData', sep='.'))
-              )              
               metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response[['val']], configs[['metric']])
           }
       }
