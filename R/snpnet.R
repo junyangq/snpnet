@@ -89,13 +89,16 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     
   ### --- Read genotype IDs --- ###
   ids <- list(); phe <- list()
-  ids[['all']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))    
+  ids[['psam']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))
+
   ### --- Read phenotype file --- ###
-  phe[['master']] <- readPheMaster(phenotype.file, ids[['all']], family, covariates, phenotype, status.col, split.col)
+  phe[['master']] <- readPheMaster(phenotype.file, ids[['psam']], family, covariates, phenotype, status.col, split.col)
+
   ### --- infer family and update the configs --- ###    
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
   configs <- setupConfigs(configs, covariates, family)
   if (configs[['verbose']]) print(configs)
+
   ### --- Check whether to use glmnet or glmnetPlus --- ###
   if (configs[['use.glmnetPlus']]) {
     glmnet.settings <- glmnetPlus::glmnet.control()
@@ -108,11 +111,6 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   }
 
   ### --- Process phenotypes --- ###  
-  phe.no.missing.IDs <- phe[['master']]$ID[
-      (phe[['master']][[phenotype]] != -9) & # missing phenotypes are encoded with -9
-      (!is.na(phe[['master']][[phenotype]])) &
-      (phe[['master']]$ID %in% ids[['all']]) # check if we have genotype
-  ] 
   if (family == "binomial"){
       # The input binary phenotype is coded as 2/1 (case/control)
       # For glmnet, we map this to 1/0 (case/control)
@@ -121,32 +119,21 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       phe[['master']][[phenotype]] <- phe[['master']][[phenotype]] - 1
   }
 
-  ### --- Process genotypes --- ###    
+  ### --- Define the set of individual IDs for training (and validation) set(s) --- ###    
   if(is.null(split.col)){
-    splits <- c('train')      
-    ids[['train']] <- ids[['all']][ids[['all']] %in% phe[['master']]$ID]
+      splits <- c('train')      
+      ids[['train']] <- phe[['master']]$ID      
   }else{
-    splits <- c('train', 'val')
-    for(s in splits) ids[[s]] <- ids[['all']][ids[['all']] %in% phe[['master']]$ID[phe[['master']][[split.col]] == s]]
-  }
-
-  # asssume IDs in the genotype matrix must exist in the phenotype matrix, and stop if not #
-  for(s in splits){
-      check.missing <- ids[[s]][!(ids[[s]] %in% phe[['master']]$ID)]
-      if (length(check.missing) > 0) {
-          warning(paste0("Missing phenotype entry (", phenotype, ") in ", s, " set for: ", utils::head(check.missing, 5), " ...\n"))
+      splits <- c('train', 'val')
+      for(s in splits){
+          ids[[s]] <- phe[['master']]$ID[ phe[['master']][[split.col]] == s ]
       }
   }
-  
-  # focus on individuals with non-missing values.
-  for(s in splits){
-    ids[[s]] <- intersect(ids[[s]], phe.no.missing.IDs)
-  }  
-
+ 
   ### --- Prepare the feature matrix --- ###
   features <- list()  
   for(s in splits){
-      phe[[s]] <- phe[['master']][match(ids[[s]], phe.no.missing.IDs), ]
+      phe[[s]] <- phe[['master']][match(ids[[s]], phe[['master']]$ID), ]
       rownames(phe[[s]]) <- phe[[s]]$ID
       if (length(covariates) > 0) {
           features[[s]] <- phe[[s]][, covariates, with = F]
@@ -154,10 +141,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
           features[[s]] <- NULL
       }
       if(configs[['verbose']]) snpnetLogger(sprintf("The number of individuals in %s set: %d", s, dim(phe[[s]])[1]))
-  }    
+  }
 
   ### --- Prepare the response --- ###
-  # cat(paste0("Number of missing phenotypes in the training set: ", n.train - n.subset.train, "\n"))
   response <- list() ; status <- list() ; surv <- list() ; pred <- list()
   for(s in splits){
       response[[s]] <- phe[[s]][[phenotype]]
@@ -171,7 +157,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   vars <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0(configs[['zstdcat.path']], ' ', paste0(genotype.pfile, '.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
   pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
   pgen <- list()
-  for(s in splits) pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['all']]))
+  for(s in splits) pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['psam']]))
   pgenlibr::ClosePvar(pvar)    
     
   stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
@@ -187,6 +173,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   ### --- End --- ###
   snpnetLoggerTimeDiff("Preprocessing end.", time.start, indent=1)
 
+  debug_data_dir <- '/oak/stanford/groups/mrivas/users/ytanigaw/sandbox/20200224_snpnet'
+  save(phe, covariates, phenotype, family, file = file.path(debug_data_dir, paste('debug1_NA', phenotype, 'RData', sep='.')))
+
   if (configs[['prevIter']] == 0) {
     snpnetLogger("Iteration 0")
     if (family == "cox"){
@@ -199,8 +188,12 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
         )
         residual <- matrix(stats::residuals(glmmod, type = "response"), ncol = 1)
     }
+    snpnetLogger("foo")
+    phe[['train']] %>% dim() %>% print()
+    residual %>% dim() %>% print()
     rownames(residual) <- rownames(phe[['train']])
     colnames(residual) <- c('0')
+    snpnetLogger("bar")
 
     if (configs[['verbose']]) snpnetLogger("  Start computing inner product for initialization ...")
     time.prod.init.start <- Sys.time()
@@ -393,17 +386,15 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
        var.rank[current_active] = pmin(var.rank[current_active], lam.idx)
      } 
     }
-      
 
-      if (lambda.idx < max.valid.idx) {
+    if (lambda.idx < max.valid.idx) {
         is.KKT.valid.for.at.least.one <- TRUE
     } else{
         is.KKT.valid.for.at.least.one <- FALSE
     }
     lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
 
-
-      if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
+    if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
     }
@@ -436,8 +427,30 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
           metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], surv[['train']], configs[['metric']])
           if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, surv[['val']], configs[['metric']])
       } else {
+          snpnetLogger('metric train')
+          debug.pred <- pred.train[, 1:check.obj[["max.valid.idx"]], drop = F]
+          debug.response <- response[['train']]
+          debug.metric.type <- configs[['metric']]
+          save(
+            debug.pred,
+            debug.response,
+            debug.metric.type,
+            file = file.path(debug_data_dir, paste('debug2_metric.train', phenotype, 'RData', sep='.'))
+          )
           metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], response[['train']], configs[['metric']])
-          if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response[['val']], configs[['metric']])
+          if (validation){
+              snpnetLogger('metric val.')
+              debug.pred <- pred.val
+              debug.response <- response[['val']]
+              debug.metric.type <- configs[['metric']]
+              save(
+                debug.pred,
+                debug.response,
+                debug.metric.type,
+                file = file.path(debug_data_dir, paste('debug2_metric.val', phenotype, 'RData', sep='.'))
+              )              
+              metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response[['val']], configs[['metric']])
+          }
       }
 
       score <- check.obj[["score"]]

@@ -56,7 +56,29 @@ readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotyp
     dplyr::arrange(sort_order) %>% dplyr::select(-sort_order) %>%
     data.table::as.data.table()
     rownames(phe.master) <- phe.master$ID
-    phe.master
+
+    # focus on individuals with non-missing values.
+    phe.no.missing.IDs <- phe.master$ID[ 
+        (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
+        (!is.na(phe.master[[phenotype]])) &
+        (phe.master$ID %in% psam.ids) # check if we have genotype
+    ]
+    checkMissingPhenoWarning(phe.master, phe.no.missing.IDs)
+    
+    phe.master[ phe.master$ID %in% phe.no.missing.IDs, ]
+}
+
+checkMissingPhenoWarning <- function(phe.master, phe.no.missing.IDs){
+  # Show warning message if there are individuals (in phe file) 
+  # that have (genotype or phenotype) missing values.
+    phe.missing.IDs <- phe.master$ID[ ! phe.master$ID %in% phe.no.missing.IDs ]
+    if(length(phe.missing.IDs) > 0){
+        warning(sprintf(
+          'We detected missing values for %d individuals (%s ...).\n', 
+          length(phe.missing.IDs),
+          paste(utils::head(phe.missing.IDs, 5), collapse=", ")
+        ))
+    }
 }
 
 computeStats <- function(pfile, ids, configs) {
@@ -153,7 +175,7 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
     rownames_to_column("ID") %>%
     separate(ID, into=c('#FID', 'IID'), sep='_') %>% 
     fwrite(residual_f, sep='\t', col.names=T)
-        
+
   # Run plink2 --geno-counts
     system(paste(
         configs[['plink2.path']], 
@@ -289,7 +311,7 @@ computeMetric <- function(pred, response, metric.type) {
         metric <- 1 - apply((response - pred)^2, 2, sum) / sum((response - mean(response))^2)
     } else if (metric.type == 'auc') {
         metric <- apply(pred, 2, function(x) {
-            pred.obj <- ROCR::prediction(x, response)
+            pred.obj <- ROCR::prediction(x, factor(response))
             auc.obj <- ROCR::performance(pred.obj, measure = 'auc')
             auc.obj@y.values[[1]]
         })
