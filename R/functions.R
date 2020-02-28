@@ -190,7 +190,7 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
     ), intern=F, wait=T)
 
   prod.full <- readBinMat(stringr::str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
-  if (! configs[['save.computeProduct']]) system(paste(
+  if (! configs[['save.computeProduct']] ) system(paste(
       'rm', residual_f, stringr::str_replace_all(residual_f, '.tsv$', '.log'), sep=' '
   ), intern=F, wait=T)
     
@@ -228,6 +228,7 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
 
   if (configs[['KKT.check.aggressive.experimental']]) {
       # An approach to address numerial precision issue.
+      # We do NOT recommended this procedure
     if (length(configs[["covariates"]]) > 0) {
       strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
     } else {
@@ -241,11 +242,11 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
   }
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- mat.cmp.', indent=2, start.time=time.KKT.check.start)    
 
-  num.violates <- apply(abs(prod.full[weak.vars, , drop = FALSE]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
-
+  # check KKT violation using mat.cmp
+  num.violates  <- apply(abs(prod.full[weak.vars, , drop = FALSE]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
   idx.violation <- which((num.violates != 0) & ((1:num.lams) >= prev.lambda.idx))
-  next.lambda.idx <- ifelse(length(idx.violation) == 0, num.lams+1, min(idx.violation))
-  max.valid.idx <- next.lambda.idx - 1  # num.lams >= 1
+  max.valid.idx <- ifelse(length(idx.violation) == 0, num.lams, min(idx.violation) - 1)
+
   if (max.valid.idx > 0) {
     score <- abs(prod.full[, max.valid.idx])
   } else {
@@ -253,8 +254,7 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
   }
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- score.', indent=2, start.time=time.KKT.check.start) 
 
-  out <- list(next.lambda.idx = next.lambda.idx, score = score,
-              max.valid.idx = max.valid.idx)
+  out <- list(max.valid.idx = max.valid.idx, score = score)
 
   if (configs[['KKT.verbose']]) {
     gene.names <- rownames(prod.full)

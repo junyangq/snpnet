@@ -372,7 +372,10 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
         stats, glmfit, configs, iter, p.factor
     )
     snpnetLogger("KKT check obj done ...", indent=1)
-    max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)  # max valid index in the whole lambda sequence
+    
+    # update the max valid index in the whole lambda sequence
+    max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)
+    lambda.idx <- max.valid.idx + 1 
 
     # Update the lambda index of variants added
     if (need.rank && check.obj[["max.valid.idx"]] > 0){
@@ -383,24 +386,20 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
        var.rank[current_active] = pmin(var.rank[current_active], lam.idx)
      } 
     }
-
-    if (lambda.idx < max.valid.idx) {
-        is.KKT.valid.for.at.least.one <- TRUE
-    } else{
-        is.KKT.valid.for.at.least.one <- FALSE
-    }
-    lambda.idx <- check.obj[["next.lambda.idx"]] + (start.lams - 1)
-
+    
     if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
     }
+
     if (configs[['use.glmnetPlus']]) {
       num.new.valid[iter] <- check.obj[["max.valid.idx"]]
     } else {
       num.new.valid[iter] <- check.obj[["max.valid.idx"]] - ifelse(iter > 1, num.new.valid[iter-1], 0)
     }
-    if (!is.KKT.valid.for.at.least.one) {
+
+    if ( prev.max.valid.idx == max.valid.idx ) {
+      # there is no valid solution in this iteration
       features.to.keep <- union(features.to.keep, features.to.add)
       increase.snp.size <- TRUE
     } else {
@@ -419,6 +418,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
         }
         snpnetLoggerTimeDiff("Time of prediction on validation matrix", time.val.pred.start, indent=2)
       }
+
       # compute metric        
       if (family == "cox") {
           metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], surv[['train']], configs[['metric']])
@@ -446,7 +446,8 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
            file = file.path(configs[['results.dir']], configs[["save.dir"]], paste0("output_iter_", iter, ".RData")))
     }
 
-    if (max.valid.idx > prev.max.valid.idx) {
+    if ( prev.max.valid.idx < max.valid.idx ) {
+      # there are valid solution(s) for at least one lambda
       if (validation) {
         snpnetLogger('Training and validation metric:', indent=1)
       }else{
