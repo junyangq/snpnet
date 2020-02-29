@@ -185,12 +185,8 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
         )
         residual <- matrix(stats::residuals(glmmod, type = "response"), ncol = 1)
     }
-    snpnetLogger("foo")
-    phe[['train']] %>% dim() %>% print()
-    residual %>% dim() %>% print()
     rownames(residual) <- rownames(phe[['train']])
     colnames(residual) <- c('0')
-    snpnetLogger("bar")
 
     if (configs[['verbose']]) snpnetLogger("  Start computing inner product for initialization ...")
     time.prod.init.start <- Sys.time()
@@ -316,25 +312,30 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
         beta0 <- prev.beta
       }
       if(family == "cox"){
-        glmfit <- glmnetPlus::glmnet(
-                features[['train']], surv[['train']], family = family,
-                lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
-                standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], beta0 = beta0
-            )
-        pred.train <- stats::predict(glmfit, newx = features[['train']])
-        residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
+          glmfit <- glmnetPlus::glmnet(
+                  features[['train']], surv[['train']], family = family,
+                  lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
+                  standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], beta0 = beta0
+              )
+          pred.train <- stats::predict(glmfit, newx = features[['train']])
+          residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
       } else {
-        glmfit <- glmnetPlus::glmnet(
-        features[['train']], response[['train']], family = family,
-        lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
-        standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']],
-        type.gaussian = "naive", beta0 = beta0
-      )
-      residual <- glmfit$residuals
-      pred.train <- response[['train']] - residual
+          glmfit <- glmnetPlus::glmnet(
+              features[['train']], response[['train']], family = family,
+              lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
+              standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']],
+              type.gaussian = "naive", beta0 = beta0
+          )
+          if(family=="gaussian"){
+              residual <- glmfit$residuals
+              pred.train <- response[['train']] - residual
+          }else{
+              pred.train <- stats::predict(glmfit, newx = as.matrix(features[['train']]), type = "response")
+              residual <- response[['train']] - pred.train
+          }                
       }
         
-    } else {
+    } else { # configs[['use.glmnetPlus']] == FALSE
         start.lams <- 1
         tmp.features.matrix <- as.matrix(features[['train']])
         if(family=="cox"){
