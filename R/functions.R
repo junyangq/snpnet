@@ -391,7 +391,7 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
     use.glmnetPlus
 }
 
-setupConfigs <- function(configs, covariates, family, results.dir) {
+setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family) {
     if (!("mem" %in% names(configs)))
         stop("mem should be provided to guide the memory capacity.")        
     defaults <- list(
@@ -435,6 +435,9 @@ setupConfigs <- function(configs, covariates, family, results.dir) {
         out[[name]] <- configs[[name]]
     }
     # store additional params
+    out[['genotype.pfile']] <- genotype.pfile
+    out[['phenotype.file']] <- phenotype.file
+    out[['phenotype']] <- phenotype
     out[['covariates']] <- covariates
     out[['family']] <- family
     

@@ -96,7 +96,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
   ### --- infer family and update the configs --- ###    
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
-  configs <- setupConfigs(configs, covariates, family)
+  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family)
   if (configs[['verbose']]) print(configs)
 
   ### --- Check whether to use glmnet or glmnetPlus --- ###
