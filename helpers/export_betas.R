@@ -3,26 +3,20 @@ args <- commandArgs(trailingOnly=TRUE)
 
 script.name <- normalizePath(sub("--file=", "", fullargs[grep("--file=", fullargs)]))
 
-#require(tidyverse)
-#require(data.table)
-#require(glmnet)
-#require(survival)
-
 # load snpnet
-# devtools::load_all(configs[['snpnet.dir']])
 devtools::load_all( dirname(dirname(script.name)) )
 
 ####################################################################
 source(file.path(dirname(script.name), 'snpnet_misc.R'))
 ####################################################################
-
-rdata_f        <- args[1]
-genotype.pfile <- args[2] # starting snpnet/0.3.5, this should be saved in rdata file
-
+rdata_f <- args[1]
 ####################################################################
 
 load(rdata_f)
-configs[['genotype.pfile']] <- genotype.pfile # starting snpnet/0.3.5, this should be saved in rdata file
+if(! 'genotype.pfile' %in% names(configs) ){
+    # starting snpnet/0.3.5, this should be saved in rdata file
+    configs[['genotype.pfile']] <- args[2]
+}
 
 df <- snpnet_fit_to_df(
     beta,
