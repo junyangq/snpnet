@@ -207,8 +207,9 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
   prod.full
 }
 
-KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, iter, p.factor=NULL) {
+KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, iter, p.factor=NULL, alpha = NULL) {
   time.KKT.check.start <- Sys.time()
+  if (is.null(alpha)) alpha <- 1
   if (configs[['KKT.verbose']]) snpnetLogger('Start KKT.check()', indent=1, log.time=time.KKT.check.start)
   prod.full <- computeProduct(residual, pfile, vars, stats, configs, iter) / n.train
   
@@ -226,19 +227,22 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- strong.vars.', indent=2, start.time=time.KKT.check.start)    
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
 
+  if (length(configs[["covariates"]]) > 0) {
+      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), , drop = FALSE]
+  } else {
+      strong.coefs <- glmfit$beta
+  }
+
+  prod.full[strong.vars, ] <- prod.full[strong.vars, , drop = FALSE] - (1-alpha) * strong.coefs * matrix(current.lams, nrow = length(strong.vars), ncol = length(current.lams), byrow = T)
+
   if (configs[['KKT.check.aggressive.experimental']]) {
       # An approach to address numerial precision issue.
       # We do NOT recommended this procedure
-    if (length(configs[["covariates"]]) > 0) {
-      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
-    } else {
-      strong.coefs <- glmfit$beta
-    }
     prod.strong <- prod.full[strong.vars, , drop = FALSE]
     max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
     mat.cmp <- matrix(max.abs.prod.strong, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
   } else {
-    mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+    mat.cmp <- matrix(current.lams * max(alpha, 1e-3), nrow = length(weak.vars), ncol = length(current.lams), byrow = T)  # make feasible for ridge
   }
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- mat.cmp.', indent=2, start.time=time.KKT.check.start)    
 
@@ -258,11 +262,6 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
 
   if (configs[['KKT.verbose']]) {
     gene.names <- rownames(prod.full)
-    if (length(configs[["covariates"]]) > 0) {
-      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
-    } else {
-      strong.coefs <- glmfit$beta
-    }
     strong.names <- rownames(strong.coefs)
     active <- matrix(FALSE, nrow(prod.full), num.lams)
     active[match(strong.names, gene.names), ] <- as.matrix(strong.coefs != 0)
@@ -391,7 +390,7 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
     use.glmnetPlus
 }
 
-setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family) {
+setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha) {
     if (!("mem" %in% names(configs)))
         stop("mem should be provided to guide the memory capacity.")        
     defaults <- list(
@@ -440,6 +439,7 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
     out[['phenotype']] <- phenotype
     out[['covariates']] <- covariates
     out[['family']] <- family
+    out[['alpha']] <- alpha
     
     # update settings
     out[["early.stopping"]] <- ifelse(out[["early.stopping"]], out[['stopping.lag']], -1)
