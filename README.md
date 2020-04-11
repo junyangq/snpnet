@@ -15,5 +15,4 @@ install_github("junyangq/glmnetPlus")
 install_github("chrchang/plink-ng", subdir="/2.0/cindex")
 install_github("chrchang/plink-ng", subdir="/2.0/pgenlibr")
 ```
-
-Install plink2 from here https://www.cog-genomics.org/plink/2.0/
+We assume the users already have PLINK 2.0. Otherwise it can be installed from https://www.cog-genomics.org/plink/2.0/.
