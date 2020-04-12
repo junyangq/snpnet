@@ -233,7 +233,8 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
       strong.coefs <- glmfit$beta
   }
 
-  prod.full[strong.vars, ] <- prod.full[strong.vars, , drop = FALSE] - (1-alpha) * strong.coefs * matrix(current.lams, nrow = length(strong.vars), ncol = length(current.lams), byrow = T)
+  prod.full[strong.vars, ] <- prod.full[strong.vars, , drop = FALSE] - (1-alpha) * as.matrix(strong.coefs) *
+    matrix(current.lams, nrow = length(strong.vars), ncol = length(current.lams), byrow = T)
 
   if (configs[['KKT.check.aggressive.experimental']]) {
       # An approach to address numerial precision issue.
