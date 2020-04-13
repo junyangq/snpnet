@@ -427,16 +427,17 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         zstdcat.path='zstdcat',
         rank = TRUE
     )
-    out <- defaults    
-    
-    # update the defaults with the specified parameters
-    for(name in intersect(names(defaults), names(configs))){
-        out[[name]] <- configs[[name]]
-    }
+    out <- defaults
+
     # store additional params
     out.args <- as.list(environment())
     for (name in names(out.args)) {
       out[[name]] <- out.args[[name]]
+    }
+
+    # update the defaults with the specified parameters
+    for(name in intersect(names(out), names(configs))){
+        out[[name]] <- configs[[name]]
     }
     
     # update settings
