@@ -78,12 +78,12 @@
 #' @importFrom data.table ':='
 #'
 #' @export
-snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL, covariates = NULL, 
-                   split.col=NULL, family = NULL, alpha = 1, p.factor=NULL, configs=NULL) {
+snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL,
+                   alpha = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
+                   split.col = NULL, p.factor = NULL, status.col = NULL, thresh = 1e-07,
+                   configs = NULL) {
 
-  need.rank <- configs[['rank']]
   validation <- (!is.null(split.col))
-  if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
   time.start <- Sys.time()
   snpnetLogger('Start snpnet', log.time = time.start)
     
@@ -98,8 +98,10 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
   ### --- infer family and update the configs --- ###    
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
-  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha)
+  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, thresh)
+  need.rank <- configs[['rank']]
   if (configs[['verbose']]) print(configs)
+  if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
 
   ### --- Check whether to use glmnet or glmnetPlus --- ###
   if (configs[['use.glmnetPlus']]) {
@@ -201,9 +203,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       
     if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
 
-    if (is.null(configs[['lambda.min.ratio']])) {
-      configs[['lambda.min.ratio']] <- ifelse(nrow(phe[['train']]) < length(vars)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)        
-    }
+    nobs <- nrow(phe[['train']])
+    nvars <- length(vars)-length(stats[["excludeSNP"]])-length(covariates)
+    configs[['lambda.min.ratio']] <- lambda.min.ratio
     full.lams <- computeLambdas(score, configs[['nlambda']], configs[['lambda.min.ratio']])
 
     lambda.idx <- 1

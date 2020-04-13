@@ -391,7 +391,7 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
     use.glmnetPlus
 }
 
-setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha) {
+setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, glmnet.thresh) {
     if (!("mem" %in% names(configs)))
         stop("mem should be provided to guide the memory capacity.")        
     defaults <- list(
@@ -407,10 +407,8 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         standardize.variant = FALSE,
         early.stopping = TRUE,
         stopping.lag = 2,
-        nlambda = 100, 
         niter = 10,
         lambda.min.ratio = NULL,
-        glmnet.thresh = 1E-7,
         KKT.verbose = FALSE,
         use.glmnetPlus = NULL,
         save = FALSE,
@@ -426,7 +424,8 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         endian="little",
         metric=NULL,
         plink2.path='plink2',
-        zstdcat.path='zstdcat'
+        zstdcat.path='zstdcat',
+        rank = TRUE
     )
     out <- defaults    
     
@@ -435,12 +434,10 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         out[[name]] <- configs[[name]]
     }
     # store additional params
-    out[['genotype.pfile']] <- genotype.pfile
-    out[['phenotype.file']] <- phenotype.file
-    out[['phenotype']] <- phenotype
-    out[['covariates']] <- covariates
-    out[['family']] <- family
-    out[['alpha']] <- alpha
+    out.args <- as.list(environment())
+    for (name in names(out.args)) {
+      out[[name]] <- out.args[[name]]
+    }
     
     # update settings
     out[["early.stopping"]] <- ifelse(out[["early.stopping"]], out[['stopping.lag']], -1)
