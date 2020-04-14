@@ -93,18 +93,19 @@ computeStats <- function(pfile, ids, configs) {
       data.frame(ID = ids) %>%
       tidyr::separate(ID, into=c('FID', 'IID'), sep='_') %>% 
       data.table::fwrite(keep_f, sep='\t', col.names=F)
-  
+
       # Run plink2 --geno-counts
-      system(paste(
+      cmd_plink2 <- paste(
           configs[['plink2.path']],
           '--threads', configs[['nCores']],
-          '--memory', configs[['mem']],
           '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
           '--keep', keep_f,
           '--out', configs[['gcount.full.prefix']],
-          '--geno-counts cols=chrom,pos,ref,alt,homref,refalt,altxy,hapref,hapalt,missing,nobs',
-          sep=' '
-      ), intern=F, wait=T)
+          '--geno-counts cols=chrom,pos,ref,alt,homref,refalt,altxy,hapref,hapalt,missing,nobs'
+      )
+      if (!is.null(configs[['mem']])) cmd_plink2 <- paste(cmd_plink2, '--memory', configs[['mem']])
+
+      system(cmd_plink2, intern=F, wait=T)
 
       # read the gcount file
       gcount_df <-
@@ -175,19 +176,22 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
     tibble::rownames_to_column("ID") %>%
     tidyr::separate(ID, into=c('#FID', 'IID'), sep='_') %>% 
     data.table::fwrite(residual_f, sep='\t', col.names=T)
-        
+
   # Run plink2 --geno-counts
-    system(paste(
-        configs[['plink2.path']], 
-        '--threads', configs[['nCores']],
-        '--memory', as.integer(configs[['mem']]) - ceiling(sum(as.matrix(gc_res)[,2])),
-        '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
-        '--read-freq', paste0(configs[['gcount.full.prefix']], '.gcount'),
-        '--keep', residual_f,
-        '--out', stringr::str_replace_all(residual_f, '.tsv$', ''),
-        '--variant-score', residual_f, 'zs', 'bin', 
-        sep=' '
-    ), intern=F, wait=T)
+  cmd_plink2 <- paste(
+    configs[['plink2.path']],
+    '--threads', configs[['nCores']],
+    '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
+    '--read-freq', paste0(configs[['gcount.full.prefix']], '.gcount'),
+    '--keep', residual_f,
+    '--out', stringr::str_replace_all(residual_f, '.tsv$', ''),
+    '--variant-score', residual_f, 'zs', 'bin'
+  )
+  if (!is.null(configs[['mem']])) {
+    cmd_plink2 <- paste(cmd_plink2, '--memory', as.integer(configs[['mem']]) - ceiling(sum(as.matrix(gc_res)[,2])))
+  }
+
+  system(cmd_plink2, intern=F, wait=T)
 
   prod.full <- readBinMat(stringr::str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
   if (! configs[['save.computeProduct']] ) system(paste(

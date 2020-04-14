@@ -78,9 +78,9 @@
 #' @importFrom data.table ':='
 #'
 #' @export
-snpnet <- function(genotype.pfile, phenotype.file, phenotype, mem, family = NULL, covariates = NULL,
+snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL,
                    alpha = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
-                   split.col = NULL, p.factor = NULL, status.col = NULL, configs = NULL) {
+                   split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL) {
 
   validation <- (!is.null(split.col))
   time.start <- Sys.time()
@@ -161,7 +161,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, mem, family = NULL
   pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
   pgen <- list()
   for(s in splits) pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['psam']]))
-  pgenlibr::ClosePvar(pvar)    
+  pgenlibr::ClosePvar(pvar)
     
   stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
     
