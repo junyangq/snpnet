@@ -391,14 +391,12 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
     use.glmnetPlus
 }
 
-setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, glmnet.thresh) {
-    if (!("mem" %in% names(configs)))
-        stop("mem should be provided to guide the memory capacity.")        
+setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, mem) {
     defaults <- list(
         missing.rate = 0.1, 
         MAF.thresh = 0.001, 
         nCores = 1,
-        mem = NULL,
+        glmnet.thresh = 1e-07,
         nlams.init = 10,
         nlams.delta = 5,
         num.snps.batch = 1000, 

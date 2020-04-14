@@ -78,10 +78,9 @@
 #' @importFrom data.table ':='
 #'
 #' @export
-snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL,
+snpnet <- function(genotype.pfile, phenotype.file, phenotype, mem, family = NULL, covariates = NULL,
                    alpha = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
-                   split.col = NULL, p.factor = NULL, status.col = NULL, thresh = 1e-07,
-                   configs = NULL) {
+                   split.col = NULL, p.factor = NULL, status.col = NULL, configs = NULL) {
 
   validation <- (!is.null(split.col))
   time.start <- Sys.time()
@@ -98,7 +97,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
 
   ### --- infer family and update the configs --- ###    
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
-  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, thresh)
+  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, mem)
   need.rank <- configs[['rank']]
   if (configs[['verbose']]) print(configs)
   if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
