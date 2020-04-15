@@ -7,11 +7,13 @@ config_params_data_type <- function(){
             'missing.rate',
             'MAF.thresh',
             'glmnet.thresh',
-            'lambda.min.ratio'
+            'lambda.min.ratio',
+            'alpha',
+            'p.factor'
         ),
         integer = c(
-            'nCores', 
-            'prevIter', 
+            'nCores',
+            'prevIter',
             'niter',
             'mem',
             'nlambda',
@@ -29,7 +31,7 @@ config_params_data_type <- function(){
             'vzs',
             'save',
             'save.computeProduct',
-            'verbose', 
+            'verbose',
             'KKT.verbose',
             'KKT.check.aggressive.experimental',
             'rank'

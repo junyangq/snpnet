@@ -78,6 +78,7 @@ trap handler_exit EXIT
 nCores=4
 mem=30000
 niter=100
+alpha=1
 covariates="None"
 split_col="split"
 status_col="status"
@@ -111,6 +112,9 @@ for OPT in "$@" ; do
             ;;
         '-n' | '--niter' )
             niter=$2 ; shift 2 ;
+            ;;
+        '-a' | '--alpha' )
+            alpha=$2 ; shift 2 ;
             ;;
         '-c' | '--covariates' )
             covariates=$2 ; shift 2 ;            
@@ -183,6 +187,7 @@ cat <<- EOF | tr " " "\t" > ${config_file}
 	nCores ${nCores}
 	mem ${mem}
 	niter ${niter}
+	alpha ${alpha}
 	covariates ${covariates}
 	split.col ${split_col}
 	status.col ${status_col}

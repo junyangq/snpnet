@@ -18,9 +18,6 @@ configs <- read_config_from_file(args[1])
 # load snpnet
 devtools::load_all(configs[['snpnet.dir']])
 
-# # please check if glmnet version is >= 2.0.20
-# print(packageVersion("glmnet"))
-
 # print(configs)
 
 # call snpnet::snpnet()
@@ -28,10 +25,12 @@ fit <- snpnet(
     genotype.pfile = configs[['genotype.pfile']],
     phenotype.file = configs[['phenotype.file']],
     phenotype      = configs[['phenotype.name']],
-    status.col     = configs[['status.col']],
-    covariates     = configs[['covariates']],
-    split.col      = configs[['split.col']],
     family         = configs[['family']],
+    covariates     = configs[['covariates']],
+    alpha          = configs[['alpha']],
+    split.col      = configs[['split.col']],
+    status.col     = configs[['status.col']],
+    mem            = configs[['mem']],
     configs        = configs
 )
 save(fit, file = file.path(configs[['results.dir']], paste0("snpnet.RData")))
