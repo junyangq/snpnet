@@ -1,6 +1,6 @@
-#' Fit the Lasso for Large Phenotype-Genotype Datasets
+#' Fit the Lasso/Elastic-Net for Large Phenotype-Genotype Datasets
 #'
-#' Fit the entire lasso solution path using the Batch Screening Iterative Lasso (BASIL) algorithm
+#' Fit the entire lasso or elastic-net solution path using the Batch Screening Iterative Lasso (BASIL) algorithm
 #' on large phenotype-genotype datasets.
 #'
 #' Junyang Qian, Wenfei Du, Yosuke Tanigawa, Matthew Aguirre, Robert Tibshirani, Manuel A. Rivas, and Trevor Hastie.
@@ -26,7 +26,9 @@
 #'                  be treated as the training and validation set, respectively. When specified, the
 #'                  model performance is evaluated on both the training and the validation sets.
 #' @param family the type of the phenotype: "gaussian", "binomial", or "cox". If not provided or NULL, it will be
-#'               detected based on the number of levels in the response.    
+#'               detected based on the number of levels in the response.
+#' @param alpha the elastic-net mixing parameter, where the penalty is defined as alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2.
+#'              alpha = 1 corresponds to the lasso penalty, while alpha = 0 corresponds to the ridge penalty.
 #' @param configs a list of other config parameters. \code{mem} must be provided.
 #'                \describe{
 #'                 \item{missing.rate}{variants are excluded if the missing rate exceeds this level. Default is 0.05.}
@@ -76,12 +78,11 @@
 #' @importFrom data.table ':='
 #'
 #' @export
-snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL, covariates = NULL, 
-                   split.col=NULL, family = NULL, p.factor=NULL, configs=NULL) {
+snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL,
+                   alpha = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
+                   split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL) {
 
-  need.rank <- configs[['rank']]
   validation <- (!is.null(split.col))
-  if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
   time.start <- Sys.time()
   snpnetLogger('Start snpnet', log.time = time.start)
     
@@ -96,8 +97,10 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
 
   ### --- infer family and update the configs --- ###    
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
-  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family)
+  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, mem)
+  need.rank <- configs[['rank']]
   if (configs[['verbose']]) print(configs)
+  if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
 
   ### --- Check whether to use glmnet or glmnetPlus --- ###
   if (configs[['use.glmnetPlus']]) {
@@ -158,7 +161,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
   pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
   pgen <- list()
   for(s in splits) pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['psam']]))
-  pgenlibr::ClosePvar(pvar)    
+  pgenlibr::ClosePvar(pvar)
     
   stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
     
@@ -195,12 +198,13 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     score <- abs(prod.full[, 1])
 
     if (!is.null(p.factor)){score <- score/p.factor[names(score)]} # Divide the score by the penalty factor
+    score <- score / max(alpha, 1e-3)
       
     if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
 
-    if (is.null(configs[['lambda.min.ratio']])) {
-      configs[['lambda.min.ratio']] <- ifelse(nrow(phe[['train']]) < length(vars)-length(stats[["excludeSNP"]])-length(covariates), 0.01,0.0001)        
-    }
+    nobs <- nrow(phe[['train']])
+    nvars <- length(vars)-length(stats[["excludeSNP"]])-length(covariates)
+    configs[['lambda.min.ratio']] <- lambda.min.ratio
     full.lams <- computeLambdas(score, configs[['nlambda']], configs[['lambda.min.ratio']])
 
     lambda.idx <- 1
@@ -313,7 +317,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
       }
       if(family == "cox"){
           glmfit <- glmnetPlus::glmnet(
-                  features[['train']], surv[['train']], family = family,
+                  features[['train']], surv[['train']], family = family, alpha = alpha,
                   lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
                   standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], beta0 = beta0
               )
@@ -321,7 +325,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
           residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
       } else {
           glmfit <- glmnetPlus::glmnet(
-              features[['train']], response[['train']], family = family,
+              features[['train']], response[['train']], family = family, alpha = alpha,
               lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
               standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']],
               type.gaussian = "naive", beta0 = beta0
@@ -340,7 +344,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
         tmp.features.matrix <- as.matrix(features[['train']])
         if(family=="cox"){
             glmfit <- glmnet::glmnet(
-                tmp.features.matrix, surv[['train']], family = family,
+                tmp.features.matrix, surv[['train']], family = family, alpha = alpha,
                 lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
                 standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']]
             )
@@ -348,7 +352,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
             residual <- computeCoxgrad(pred.train, response[['train']], status[['train']]) 
         }else{
             glmfit <- glmnet::glmnet(
-                tmp.features.matrix, response[['train']], family = family, 
+                tmp.features.matrix, response[['train']], family = family, alpha = alpha,
                 lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, 
                 standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], 
                 type.gaussian = "naive"
@@ -370,13 +374,13 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, status.col = NULL,
     check.obj <- KKT.check(
         residual, genotype.pfile, vars, nrow(phe[['train']]),
         current.lams[start.lams:num.lams], ifelse(configs[['use.glmnetPlus']], 1, lambda.idx),
-        stats, glmfit, configs, iter, p.factor
+        stats, glmfit, configs, iter, p.factor, alpha
     )
     snpnetLogger("KKT check obj done ...", indent=1)
     
     # update the max valid index in the whole lambda sequence
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)
-    lambda.idx <- max.valid.idx + 1 
+    lambda.idx <- max.valid.idx + 1
 
     # Update the lambda index of variants added
     if (need.rank && check.obj[["max.valid.idx"]] > 0){

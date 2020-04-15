@@ -93,18 +93,19 @@ computeStats <- function(pfile, ids, configs) {
       data.frame(ID = ids) %>%
       tidyr::separate(ID, into=c('FID', 'IID'), sep='_') %>% 
       data.table::fwrite(keep_f, sep='\t', col.names=F)
-  
+
       # Run plink2 --geno-counts
-      system(paste(
+      cmd_plink2 <- paste(
           configs[['plink2.path']],
           '--threads', configs[['nCores']],
-          '--memory', configs[['mem']],
           '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
           '--keep', keep_f,
           '--out', configs[['gcount.full.prefix']],
-          '--geno-counts cols=chrom,pos,ref,alt,homref,refalt,altxy,hapref,hapalt,missing,nobs',
-          sep=' '
-      ), intern=F, wait=T)
+          '--geno-counts cols=chrom,pos,ref,alt,homref,refalt,altxy,hapref,hapalt,missing,nobs'
+      )
+      if (!is.null(configs[['mem']])) cmd_plink2 <- paste(cmd_plink2, '--memory', configs[['mem']])
+
+      system(cmd_plink2, intern=F, wait=T)
 
       # read the gcount file
       gcount_df <-
@@ -175,19 +176,22 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
     tibble::rownames_to_column("ID") %>%
     tidyr::separate(ID, into=c('#FID', 'IID'), sep='_') %>% 
     data.table::fwrite(residual_f, sep='\t', col.names=T)
-        
+
   # Run plink2 --geno-counts
-    system(paste(
-        configs[['plink2.path']], 
-        '--threads', configs[['nCores']],
-        '--memory', as.integer(configs[['mem']]) - ceiling(sum(as.matrix(gc_res)[,2])),
-        '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
-        '--read-freq', paste0(configs[['gcount.full.prefix']], '.gcount'),
-        '--keep', residual_f,
-        '--out', stringr::str_replace_all(residual_f, '.tsv$', ''),
-        '--variant-score', residual_f, 'zs', 'bin', 
-        sep=' '
-    ), intern=F, wait=T)
+  cmd_plink2 <- paste(
+    configs[['plink2.path']],
+    '--threads', configs[['nCores']],
+    '--pfile', pfile, ifelse(configs[['vzs']], 'vzs', ''),
+    '--read-freq', paste0(configs[['gcount.full.prefix']], '.gcount'),
+    '--keep', residual_f,
+    '--out', stringr::str_replace_all(residual_f, '.tsv$', ''),
+    '--variant-score', residual_f, 'zs', 'bin'
+  )
+  if (!is.null(configs[['mem']])) {
+    cmd_plink2 <- paste(cmd_plink2, '--memory', as.integer(configs[['mem']]) - ceiling(sum(as.matrix(gc_res)[,2])))
+  }
+
+  system(cmd_plink2, intern=F, wait=T)
 
   prod.full <- readBinMat(stringr::str_replace_all(residual_f, '.tsv$', '.vscore'), configs)
   if (! configs[['save.computeProduct']] ) system(paste(
@@ -207,8 +211,9 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
   prod.full
 }
 
-KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, iter, p.factor=NULL) {
+KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.idx, stats, glmfit, configs, iter, p.factor=NULL, alpha = NULL) {
   time.KKT.check.start <- Sys.time()
+  if (is.null(alpha)) alpha <- 1
   if (configs[['KKT.verbose']]) snpnetLogger('Start KKT.check()', indent=1, log.time=time.KKT.check.start)
   prod.full <- computeProduct(residual, pfile, vars, stats, configs, iter) / n.train
   
@@ -226,19 +231,23 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- strong.vars.', indent=2, start.time=time.KKT.check.start)    
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
 
+  if (length(configs[["covariates"]]) > 0) {
+      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), , drop = FALSE]
+  } else {
+      strong.coefs <- glmfit$beta
+  }
+
+  prod.full[strong.vars, ] <- prod.full[strong.vars, , drop = FALSE] - (1-alpha) * as.matrix(strong.coefs) *
+    matrix(current.lams, nrow = length(strong.vars), ncol = length(current.lams), byrow = T)
+
   if (configs[['KKT.check.aggressive.experimental']]) {
       # An approach to address numerial precision issue.
       # We do NOT recommended this procedure
-    if (length(configs[["covariates"]]) > 0) {
-      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
-    } else {
-      strong.coefs <- glmfit$beta
-    }
     prod.strong <- prod.full[strong.vars, , drop = FALSE]
     max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
     mat.cmp <- matrix(max.abs.prod.strong, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
   } else {
-    mat.cmp <- matrix(current.lams, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+    mat.cmp <- matrix(current.lams * max(alpha, 1e-3), nrow = length(weak.vars), ncol = length(current.lams), byrow = T)  # make feasible for ridge
   }
   if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- mat.cmp.', indent=2, start.time=time.KKT.check.start)    
 
@@ -258,11 +267,6 @@ KKT.check <- function(residual, pfile, vars, n.train, current.lams, prev.lambda.
 
   if (configs[['KKT.verbose']]) {
     gene.names <- rownames(prod.full)
-    if (length(configs[["covariates"]]) > 0) {
-      strong.coefs <- glmfit$beta[-(1:length(configs[["covariates"]])), ]
-    } else {
-      strong.coefs <- glmfit$beta
-    }
     strong.names <- rownames(strong.coefs)
     active <- matrix(FALSE, nrow(prod.full), num.lams)
     active[match(strong.names, gene.names), ] <- as.matrix(strong.coefs != 0)
@@ -391,14 +395,12 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
     use.glmnetPlus
 }
 
-setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family) {
-    if (!("mem" %in% names(configs)))
-        stop("mem should be provided to guide the memory capacity.")        
+setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, mem) {
     defaults <- list(
         missing.rate = 0.1, 
         MAF.thresh = 0.001, 
         nCores = 1,
-        mem = NULL,
+        glmnet.thresh = 1e-07,
         nlams.init = 10,
         nlams.delta = 5,
         num.snps.batch = 1000, 
@@ -407,10 +409,8 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         standardize.variant = FALSE,
         early.stopping = TRUE,
         stopping.lag = 2,
-        nlambda = 100, 
         niter = 10,
         lambda.min.ratio = NULL,
-        glmnet.thresh = 1E-7,
         KKT.verbose = FALSE,
         use.glmnetPlus = NULL,
         save = FALSE,
@@ -426,20 +426,21 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         endian="little",
         metric=NULL,
         plink2.path='plink2',
-        zstdcat.path='zstdcat'
+        zstdcat.path='zstdcat',
+        rank = TRUE
     )
-    out <- defaults    
-    
+    out <- defaults
+
+    # store additional params
+    out.args <- as.list(environment())
+    for (name in names(out.args)) {
+      out[[name]] <- out.args[[name]]
+    }
+
     # update the defaults with the specified parameters
-    for(name in intersect(names(defaults), names(configs))){
+    for(name in intersect(names(out), names(configs))){
         out[[name]] <- configs[[name]]
     }
-    # store additional params
-    out[['genotype.pfile']] <- genotype.pfile
-    out[['phenotype.file']] <- phenotype.file
-    out[['phenotype']] <- phenotype
-    out[['covariates']] <- covariates
-    out[['family']] <- family
     
     # update settings
     out[["early.stopping"]] <- ifelse(out[["early.stopping"]], out[['stopping.lag']], -1)
