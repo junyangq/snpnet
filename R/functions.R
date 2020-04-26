@@ -31,7 +31,7 @@ inferFamily <- function(phe, phenotype, status){
 
 readIDsFromPsam <- function(psam){
     df <- data.table::fread(psam) %>%
-    dplyr::rename('FID' = '#FID') %>%
+    dplyr::rename('FID' = 'FID') %>%
     dplyr::mutate(ID = paste(FID, IID, sep='_'))
     df$ID
 }
@@ -174,7 +174,7 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
   colnames(residual_df) <- paste0('lambda_idx_', colnames(residual))
   residual_df %>%    
     tibble::rownames_to_column("ID") %>%
-    tidyr::separate(ID, into=c('#FID', 'IID'), sep='_') %>% 
+    tidyr::separate(ID, into=c('FID', 'IID'), sep='_') %>% 
     data.table::fwrite(residual_f, sep='\t', col.names=T)
 
   # Run plink2 --geno-counts
