@@ -129,6 +129,7 @@ computeStats <- function(pfile, ids, configs) {
     names(out[[key]]) <- gcount_df %>% dplyr::select(ID) %>% dplyr::pull()
   }    
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
+  out[["excludeSNP"]] <- out[["excludeSNP"]][ ! is.na(out[["excludeSNP"]]) ]
     
   if (configs[['save']]){
       gcount_df %>% data.table::fwrite(gcount_tsv_f, sep='\t')
@@ -199,9 +200,9 @@ computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
   ), intern=F, wait=T)
     
   snpnetLoggerTimeDiff('End plink2 --variant-score.', time.computeProduct.start, indent=4)
-    
-  rownames(prod.full) <- vars    
-  if (configs[["standardize.variant"]]) {
+
+  rownames(prod.full) <- vars
+  if (configs[["standardize.variant"]]) {    
       for(residual.col in 1:ncol(residual)){
         prod.full[, residual.col] <- apply(prod.full[, residual.col], 2, "/", stats[["sds"]])
       }
