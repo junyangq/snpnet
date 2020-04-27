@@ -434,7 +434,7 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
     out <- defaults
 
     # store additional params
-    for (name in names(out.args)) {
+    for (name in setdiff(names(out.args), "configs")) {
       out[[name]] <- out.args[[name]]
     }
 
