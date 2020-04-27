@@ -397,6 +397,7 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
 }
 
 setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, mem) {
+    out.args <- as.list(environment())
     defaults <- list(
         missing.rate = 0.1, 
         MAF.thresh = 0.001, 
@@ -433,7 +434,6 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
     out <- defaults
 
     # store additional params
-    out.args <- as.list(environment())
     for (name in names(out.args)) {
       out[[name]] <- out.args[[name]]
     }
