@@ -58,11 +58,20 @@ readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotyp
     rownames(phe.master) <- phe.master$ID
 
     # focus on individuals with non-missing values.
-    phe.no.missing.IDs <- phe.master$ID[ 
-        (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
-        (!is.na(phe.master[[phenotype]])) &
-        (phe.master$ID %in% psam.ids) # check if we have genotype
-    ]
+    if(is.na(split.col)){
+        phe.no.missing.IDs <- phe.master$ID[ 
+            (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
+            (!is.na(phe.master[[phenotype]])) &
+            (phe.master$ID %in% psam.ids) # check if we have genotype
+        ]
+    }else{
+        phe.no.missing.IDs <- phe.master$ID[ 
+            (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
+            (!is.na(phe.master[[phenotype]])) &
+            (phe.master$ID %in% psam.ids) & # check if we have genotype
+            (phe.master[[split.col]] %in% c('train', 'val')) # focus on individuals in training and validation set
+        ]
+    }  
     checkMissingPhenoWarning(phe.master, phe.no.missing.IDs)
     
     phe.master[ phe.master$ID %in% phe.no.missing.IDs, ]
