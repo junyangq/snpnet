@@ -36,17 +36,32 @@ readIDsFromPsam <- function(psam){
     df$ID
 }
 
+cat_or_zcat <- function(filename, configs=list(zstdcat.path='zstdcat', zcat.path='zcat')){
+  # note, we should use the proper config from snpnet::snpnet()
+    if(str_ends(basename(filename), '.zst')){
+        return(configs[['zstdcat.path']])
+    }else if(str_ends(basename(filename), '.gz')){
+        return(configs[['zcat.path']])
+    }else{
+        return('cat')      
+    }
+}
+
 readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col){
     if(family == 'cox' || is.null(family)){
         selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
     } else{
         selectCols <- c("FID", "IID", covariates, phenotype, split.col)
     }
-    phe.master.unsorted <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = selectCols)
+
+    phe.master.unsorted <- data.table::fread(
+      cmd=paste(cat_or_zcat(phenotype.file), phenotype.file, ' | sed -e "s/^#//g"'),
+      colClasses = c("FID" = "character", "IID" = "character"), select = selectCols
+    )
     phe.master.unsorted$ID <- paste(phe.master.unsorted$FID, phe.master.unsorted$IID, sep = "_")
 
     # make sure the phe.master has the same individual ordering as in the genotype data
-    # it seemed like the code is robust enought (as of 2019/11/13) but just want to be safe
+    # so that we don't have error when opening pgen file with sample subset option.
     phe.master <- phe.master.unsorted %>%
     dplyr::left_join(
         data.frame(ID = psam.ids, stringsAsFactors=F) %>%
@@ -438,6 +453,7 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         metric=NULL,
         plink2.path='plink2',
         zstdcat.path='zstdcat',
+        zcat.path='zcat',
         rank = TRUE
     )
     out <- defaults
