@@ -57,6 +57,7 @@
 #'                              the maximum lambda that makes all penalized coefficients zero.}
 #'                 \item{num.snps.batch}{the number of variants added to the strong set in each iteration. Default is 1000.}
 #'                 \item{glmnet.thresh}{the convergence threshold used in glmnet/glmnetPlus.}
+#'                 \item{keep}{one may specify keep file in plink format to focus on a subset of individuals.}
 #'                 \item{verbose}{a logical value indicating if more detailed messages should be printed.}
 #'                 \item{save}{a logical value whether to save the intermediate results (e.g. in case of job failure and restart).}
 #'                 \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if 
@@ -71,6 +72,7 @@
 #'                              Default is half of the batch size.}
 #'                 \item{plink2.path}{the user-specified path to plink2 (default: plink2)}
 #'                 \item{zstdcat.path}{the user-specified path to zstdcat (default: zstdcat)}
+#'                 \item{zcat.path}{the user-specified path to zcat (to read a zcat compressed phenotype file) (default: zdcat)}
 #'                 \item{rank}{if TRUE, then the smallest lambda indices when each variable enters the model are recorded}
 #'                }
 #' @return A list containing the solution path, the metric evaluated on training/validation set and others.
@@ -92,15 +94,17 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
   ids <- list(); phe <- list()
   ids[['psam']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))
 
+  ### --- combine the specified configs with the default values --- ###    
+  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, alpha, nlambda, split.col, p.factor, status.col, mem)
+  if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
+
   ### --- Read phenotype file --- ###
-  phe[['master']] <- readPheMaster(phenotype.file, ids[['psam']], family, covariates, phenotype, status.col, split.col)
+  phe[['master']] <- readPheMaster(phenotype.file, ids[['psam']], family, covariates, phenotype, status.col, split.col, configs)
 
   ### --- infer family and update the configs --- ###    
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
-  configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, mem)
-  need.rank <- configs[['rank']]
+  configs <- updateConfigsWithFamily(configs, family)
   if (configs[['verbose']]) print(configs)
-  if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
 
   ### --- Check whether to use glmnet or glmnetPlus --- ###
   if (configs[['use.glmnetPlus']]) {
@@ -166,7 +170,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
   stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
     
   ### --- Keep track of the lambda index at which each variant is first added to the model, if required --- ###
-  if (need.rank){
+  if (configs[['rank']]){
     var.rank <- rep(configs[['nlambda']]+1, length(vars))
     names(var.rank) <- vars
   } else{
@@ -383,7 +387,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
     lambda.idx <- max.valid.idx + 1
 
     # Update the lambda index of variants added
-    if (need.rank && check.obj[["max.valid.idx"]] > 0){
+    if (configs[['rank']] && check.obj[["max.valid.idx"]] > 0){
       tmp <- 1
       for (lam.idx in start.lams:max.valid.idx){       
        current_active <- setdiff(names(which(glmfit$beta[, tmp] != 0)), covariates)

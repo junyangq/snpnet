@@ -63,9 +63,11 @@ read_config_from_file <- function(config_file){
     for(k in intersect(config_dt[['logical']], names(config))){
         config[[k]] <- as.logical(config[[k]])
     }
-    if(!'status' %in% names(config)) config[['status']] <- NULL
-    if(!'covariates' %in% names(config)) config[['covariates']] <- NULL
-    if(!'split.col' %in% names(config)) config[['split.col']] <- NULL
+    for(key in c('status', 'covariates', 'split.col', 'keep')){
+        if( (! key %in% names(config)) | (config[[ key ]] %in% c('NULL', 'null', 'Null')) | is.na(config[[ key ]]) ){
+            config[[ key ]] <- NULL
+        }
+    }
     if(!'validation' %in% names(config)) config[['validation']] <- FALSE
     if(!config[['validation']]) config[['split.col']] <- NULL
     config[['covariates']] = parse_covariates(config[['covariates']])
