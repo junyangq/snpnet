@@ -471,8 +471,8 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
       out[[name]] <- out.args[[name]]
     }
 
-    # update the defaults with the specified parameters
-    for(name in intersect(names(out), names(configs))){
+    # update the defaults with the specified parameters and keep redundant parameters from configs
+    for (name in names(configs)) {
         out[[name]] <- configs[[name]]
     }
     
