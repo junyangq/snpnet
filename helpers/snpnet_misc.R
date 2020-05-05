@@ -63,7 +63,7 @@ read_config_from_file <- function(config_file){
     for(k in intersect(config_dt[['logical']], names(config))){
         config[[k]] <- as.logical(config[[k]])
     }
-    for(key in c('status', 'covariates', 'split.col', 'keep')){
+    for(key in c('status.col', 'covariates', 'split.col', 'keep')){
         if( (! key %in% names(config)) | (config[[ key ]] %in% c('NULL', 'null', 'Null')) | is.na(config[[ key ]]) ){
             config[[ key ]] <- NULL
         }
