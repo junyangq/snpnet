@@ -1,7 +1,5 @@
 *.o
 *.so
-*.Rd
-man
 .Rproj.user
 .Rhistory
 .RData

@@ -422,7 +422,7 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         standardize.variant = FALSE,
         early.stopping = TRUE,
         stopping.lag = 2,
-        niter = 10,
+        niter = 50,
         lambda.min.ratio = NULL,
         KKT.verbose = FALSE,
         use.glmnetPlus = NULL,

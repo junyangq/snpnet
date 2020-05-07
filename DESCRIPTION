@@ -14,7 +14,7 @@ Encoding: UTF-8
 LazyData: true
 Imports: ROCR, crochet, utils, stats, data.table, methods, cindex, tidyverse, pgenlibr, glmnet (>= 3.0.2)
 Depends: R (>= 3.6.1)
-RoxygenNote: 7.0.0
+RoxygenNote: 7.1.0
 Suggests: knitr,
     rmarkdown,
     glmnetPlus,

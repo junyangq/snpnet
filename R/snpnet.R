@@ -7,66 +7,74 @@
 #' "A Fast and Flexible Algorithm for Solving the Lasso in Large-scale and Ultrahigh-dimensional Problems."
 #' bioRxiv (2019): https://doi.org/10.1101/630079
 #'
-#' @param genotype.pfile the PLINK 2.0 pgen file that contains genotype. 
+#' @param genotype.pfile the PLINK 2.0 pgen file that contains genotype.
 #'                       We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.
 #' @param phenotype.file the path of the file that contains the phenotype values and can be read as
-#'                       as a table. There should be FID (family ID) and IID (individual ID) columns 
-#'                       containing the identifier for each individual and phenotype column(s).
-#'                       (optional) some covariate columns and a colunn specifying the 
+#'                       as a table. There should be FID (family ID) and IID (individual ID) columns
+#'                       containing the identifier for each individual, and the phenotype column(s).
+#'                       (optional) some covariate columns and a column specifying the
 #'                       training/validation split can be included in this file.
 #' @param phenotype the name of the phenotype. Must be the same as the corresponding column name in
 #'                  the phenotype file.
-#' @param status.col the column name for the status column for Cox proportional hazards model.
-#'                   When running the Cox model, the specified column must exist in the phenotype file.
+#' @param family the type of the phenotype: "gaussian", "binomial", or "cox". If not provided or NULL,
+#'               it will be detected based on the number of levels in the response.
 #' @param covariates a character vector containing the names of the covariates included in the lasso
 #'                   fitting, whose coefficients will not be penalized. The names must exist in the
 #'                   column names of the phenotype file.
+#' @param alpha the elastic-net mixing parameter, where the penalty is defined as
+#'              alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2.alpha = 1 corresponds to the lasso penalty,
+#'              while alpha = 0 corresponds to the ridge penalty.
+#' @param nlambda the number of lambda values - default is 100.
+#' @param lambda.min.ratio smallest value for lambda, as a fraction of lambda.max, the (data derived) entry value,
+#'                         i.e. the smallest value for which all coefficients are zero. The default
+#'                         depends on the sample size nobs relative to the number of actual variables
+#'                         nvars (after QC filtering). If nobs > nvars, the default is 0.0001, close to zero.
+#'                         If nobs < nvars, the default is 0.01. A very small value of lambda.min.ratio
+#'                         will lead to a saturated fit in the nobs < nvars case.
 #' @param split.col the column name in the phenotype file that specifies the membership of individuals to
 #'                  the training or the validation set. The individuals marked as "train" and "val" will
 #'                  be treated as the training and validation set, respectively. When specified, the
 #'                  model performance is evaluated on both the training and the validation sets.
-#' @param family the type of the phenotype: "gaussian", "binomial", or "cox". If not provided or NULL, it will be
-#'               detected based on the number of levels in the response.
-#' @param alpha the elastic-net mixing parameter, where the penalty is defined as alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2.
-#'              alpha = 1 corresponds to the lasso penalty, while alpha = 0 corresponds to the ridge penalty.
-#' @param configs a list of other config parameters. \code{mem} must be provided.
+#' @param p.factor a named vector of separate penalty factors applied to each coefficient. This is
+#' a number that multiplies lambda to allow different shrinkage. If not provided, default is 1
+#' for all variables. Otherwise should be complete and positive for all variables.
+#' @param status.col the column name for the status column for Cox proportional hazards model.
+#'                   When running the Cox model, the specified column must exist in the phenotype file.
+#' @param mem Memory (MB) available for the program. It tells PLINK 2.0 the amount of memory it can
+#' harness for the computation. IMPORTANT if using a job scheduler.
+#' @param configs a list of other config parameters.
 #'                \describe{
 #'                 \item{missing.rate}{variants are excluded if the missing rate exceeds this level. Default is 0.05.}
 #'                 \item{MAF.thresh}{variants are excluded if the minor allele frequency (MAF) is lower
 #'                                than this level. Default is 0.001.}
 #'                 \item{nCores}{the number of cores used for computation. You may use the maximum number
 #'                            of cores available on the computer. Default is 1, single core.}
-#'                 \item{\strong{mem}}{the memory size (MB).}
+#'                 \item{num.snps.batch}{the number of variants added to the strong set in each iteration. Default is 1000.}
+#'                 \item{niter}{The number of maximum iteration in the algorithm. Note that each iteration
+#'                              may be able to find solutions for more than one lambda value. The default is 50}
+#'                 \item{prevIter}{if non-zero, it indicates the last successful iteration in the procedure so that
+#'                              we can restart from there. niter should be no less than prevIter.}
+#'                 \item{save}{a logical value whether to save the intermediate results (e.g. in case of job failure and restart).}
 #'                 \item{results.dir}{the path to the directory where meta and intermediate results are saved.}
 #'                 \item{meta.dir}{the relative path to the subdirectory used to store the computed
 #'                              summary statistics, e.g. mean, missing rate, standard deviation (when `standardization = TRUE`).
-#'                              Needed when `save = T` specified in the main function. Default is `"meta.dir/`.}
+#'                              Needed when `save = TRUE`. Default is `"meta.dir/`.}
 #'                 \item{save.dir}{the relative path to the subdirectory used to store the intermediate
 #'                              results so that we may look into or recover from later.
-#'                              Needed when `save = T` specified in the main function. Default is `"results.dir/`.}
+#'                              Needed when `save = TRUE`. Default is `"results.dir/`.}
 #'                 \item{nlams.init}{the number of lambdas considered in the first iteration.
 #'                              Default 10 is a reasonable number to start with.}
 #'                 \item{nlams.delta}{the length of extended lambdas down the sequence when there are few
 #'                              left in the current sequence (remember we don't fit all lambdas
 #'                              every iteration, only extend when most of the current ones have been completed and validated). Default is 5.}
-#'                 \item{standardize.variant}{a logical value indicating whether the variants are standardized in the lasso fitting.
-#'                              Default is FALSE. For SNP matrix, we may not want to standardize since the variants are already on the same scale.}
-#'                 \item{nlambda}{the number of lambda values on the solution path. The default is 100.}
-#'                 \item{niter}{The number of maximum iteration in the algorithm. The default is 10.}
-#'                 \item{lambda.min.ratio}{the ratio of the minimum lambda considered versus 
-#'                              the maximum lambda that makes all penalized coefficients zero.}
-#'                 \item{num.snps.batch}{the number of variants added to the strong set in each iteration. Default is 1000.}
 #'                 \item{glmnet.thresh}{the convergence threshold used in glmnet/glmnetPlus.}
-#'                 \item{verbose}{a logical value indicating if more detailed messages should be printed.}
-#'                 \item{save}{a logical value whether to save the intermediate results (e.g. in case of job failure and restart).}
-#'                 \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if 
+#'                 \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if
 #'                              the glmnetPlus package is available. Currently only "gaussian" family is supported.}
 #'                 \item{early.stopping}{a logical value indicating whether early stopping based on validation metric is desired.}
 #'                 \item{stopping.lag}{a parameter for the stopping criterion such that the procedure stops after
 #'                              this number of consecutive decreases in the validation metric.}
+#'                 \item{verbose}{a logical value indicating if more detailed messages should be printed.}
 #'                 \item{KKT.verbose}{a logical value indicating if details on KKT check should be printed.}
-#'                 \item{prevIter}{if non-zero, it indicates the last successful iteration in the procedure so that 
-#'                              we can restart from there. niter should be no less than prevIter.}
 #'                 \item{increase.size}{the increase in batch size if the KKT condition fails often in recent iterations.
 #'                              Default is half of the batch size.}
 #'                 \item{plink2.path}{the user-specified path to plink2 (default: plink2)}
@@ -85,9 +93,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
   validation <- (!is.null(split.col))
   time.start <- Sys.time()
   snpnetLogger('Start snpnet', log.time = time.start)
-    
+
   snpnetLogger('Preprocessing start..')
-    
+
   ### --- Read genotype IDs --- ###
   ids <- list(); phe <- list()
   ids[['psam']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))
@@ -95,7 +103,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
   ### --- Read phenotype file --- ###
   phe[['master']] <- readPheMaster(phenotype.file, ids[['psam']], family, covariates, phenotype, status.col, split.col)
 
-  ### --- infer family and update the configs --- ###    
+  ### --- infer family and update the configs --- ###
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
   configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, mem)
   need.rank <- configs[['rank']]
@@ -113,7 +121,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
     glmnet::glmnet.control(fdev = 0, devmax = 1)
   }
 
-  ### --- Process phenotypes --- ###  
+  ### --- Process phenotypes --- ###
   if (family == "binomial"){
       # The input binary phenotype is coded as 2/1 (case/control)
       # For glmnet, we map this to 1/0 (case/control)
@@ -122,19 +130,19 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
       phe[['master']][[phenotype]] <- phe[['master']][[phenotype]] - 1
   }
 
-  ### --- Define the set of individual IDs for training (and validation) set(s) --- ###    
+  ### --- Define the set of individual IDs for training (and validation) set(s) --- ###
   if(is.null(split.col)){
-      splits <- c('train')      
-      ids[['train']] <- phe[['master']]$ID      
+      splits <- c('train')
+      ids[['train']] <- phe[['master']]$ID
   }else{
       splits <- c('train', 'val')
       for(s in splits){
           ids[[s]] <- phe[['master']]$ID[ phe[['master']][[split.col]] == s ]
       }
   }
- 
+
   ### --- Prepare the feature matrix --- ###
-  features <- list()  
+  features <- list()
   for(s in splits){
       phe[[s]] <- phe[['master']][match(ids[[s]], phe[['master']]$ID), ]
       rownames(phe[[s]]) <- phe[[s]]$ID
@@ -162,9 +170,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
   pgen <- list()
   for(s in splits) pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['psam']]))
   pgenlibr::ClosePvar(pvar)
-    
+
   stats <- computeStats(genotype.pfile, phe[['train']]$ID, configs = configs)
-    
+
   ### --- Keep track of the lambda index at which each variant is first added to the model, if required --- ###
   if (need.rank){
     var.rank <- rep(configs[['nlambda']]+1, length(vars))
@@ -199,7 +207,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
 
     if (!is.null(p.factor)){score <- score/p.factor[names(score)]} # Divide the score by the penalty factor
     score <- score / max(alpha, 1e-3)
-      
+
     if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
 
     nobs <- nrow(phe[['train']])
@@ -236,7 +244,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
       } else {
         features[[s]] <- prepareFeatures(pgen[[s]], vars, chr.to.keep, stats)
       }
-    }            
+    }
     prev.max.valid.idx <- max.valid.idx
     snpnetLoggerTimeDiff("Time elapsed on loading back features", time.load.start)
     earlyStopNow <- (validation && checkEarlyStopping(metric.val, max.valid.idx, configs[['prevIter']], configs))
@@ -264,7 +272,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
       which.in.model <- which(names(score) %in% colnames(features[['train']]))
       score[which.in.model] <- NA
     }
-    if (!is.null(p.factor)) {score <- score/p.factor[names(score)]} 
+    if (!is.null(p.factor)) {score <- score/p.factor[names(score)]}
     sorted.score <- sort(score, decreasing = T, na.last = NA)
     if (length(sorted.score) > 0) {
       features.to.add <- names(sorted.score)[1:min(configs[['num.snps.batch']], length(sorted.score))]
@@ -288,7 +296,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
       snpnetLogger(paste0("- # newly added variables: ", length(features.to.add), "."), indent=2)
       snpnetLogger(paste0("- Total # variables in the strong set: ", ncol(features[['train']]), "."), indent=2)
     }
-      
+
     ### --- Fit glmnet --- ###
     if (configs[['verbose']]){
         if(configs[['use.glmnetPlus']]){
@@ -299,7 +307,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
     }
     if (is.null(p.factor)){
       penalty.factor <- rep(1, ncol(features[['train']]))
-      penalty.factor[seq_len(length(covariates))] <- 0      
+      penalty.factor[seq_len(length(covariates))] <- 0
     } else {
       penalty.factor <- c(rep(0, length(covariates)), p.factor[colnames(features[['train']])[-(1:length(covariates))]])
     }
@@ -336,9 +344,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
           }else{
               pred.train <- stats::predict(glmfit, newx = as.matrix(features[['train']]), type = "response")
               residual <- response[['train']] - pred.train
-          }                
+          }
       }
-        
+
     } else { # configs[['use.glmnetPlus']] == FALSE
         start.lams <- 1
         tmp.features.matrix <- as.matrix(features[['train']])
@@ -349,12 +357,12 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
                 standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']]
             )
             pred.train <- stats::predict(glmfit, newx = tmp.features.matrix)
-            residual <- computeCoxgrad(pred.train, response[['train']], status[['train']]) 
+            residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
         }else{
             glmfit <- glmnet::glmnet(
                 tmp.features.matrix, response[['train']], family = family, alpha = alpha,
-                lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor, 
-                standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']], 
+                lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
+                standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']],
                 type.gaussian = "naive"
             )
             pred.train <- stats::predict(glmfit, newx = tmp.features.matrix, type = "response")
@@ -377,7 +385,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
         stats, glmfit, configs, iter, p.factor, alpha
     )
     snpnetLogger("KKT check obj done ...", indent=1)
-    
+
     # update the max valid index in the whole lambda sequence
     max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)
     lambda.idx <- max.valid.idx + 1
@@ -385,13 +393,13 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
     # Update the lambda index of variants added
     if (need.rank && check.obj[["max.valid.idx"]] > 0){
       tmp <- 1
-      for (lam.idx in start.lams:max.valid.idx){       
+      for (lam.idx in start.lams:max.valid.idx){
        current_active <- setdiff(names(which(glmfit$beta[, tmp] != 0)), covariates)
        tmp <- tmp + 1
        var.rank[current_active] = pmin(var.rank[current_active], lam.idx)
-     } 
+     }
     }
-    
+
     if (configs[['use.glmnetPlus']] && check.obj[["max.valid.idx"]] > 0) {
       prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
       prev.beta <- prev.beta[prev.beta != 0]
@@ -424,7 +432,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
         snpnetLoggerTimeDiff("Time of prediction on validation matrix", time.val.pred.start, indent=2)
       }
 
-      # compute metric        
+      # compute metric
       if (family == "cox") {
           metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], surv[['train']], configs[['metric']])
           if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, surv[['val']], configs[['metric']])
