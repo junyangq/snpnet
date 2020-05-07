@@ -62,74 +62,32 @@ library(snpnet)
 ```
 
 ```{r}
-genotype.dir <- paste0(system.file("extdata", package = "snpnet"), "/")
-phenotype.file <- system.file("extdata", "sample_phe.phe", package = "snpnet")
-
-configs_default <- list(
-  bufferSize = 200
-)  ## use all the other default settings
-
-# use glmnetPlus
-out_default <- snpnet(
-  genotype.dir = genotype.dir,
-  phenotype.file = phenotype.file,
-  phenotype = "QPHE",
-  covariates = c("age", "sex", paste0("PC", 1:10)),
-  family = "gaussian",
-  standardize.variant = FALSE,
-  niter = 2,
-  validation = FALSE,
-  configs = configs_default,
-  use.glmnetPlus = TRUE,
-  verbose = FALSE,
-  save = FALSE,
-  glmnet.thresh = 1e-12
-)
-
+genotype.pfile <- file.path(system.file("extdata", package = "snpnet"), "sample")
+phenotype.file <- system.file("extdata", "sample.phe", package = "snpnet")
+phenotype <- "QPHE"
+covariates <- c("age", "sex", paste0("PC", 1:10))
 configs <- list(
-  missing.rate = 0.1,
-  MAF.thresh = 0.001,
-  nCores = 1,
-  bufferSize = 200,
-  nlams.init = 10,
-  nlams.delta = 5
+  glmnet.thresh = 1e-12,
+  thresh = 1e-12
 )
 
-# use glmnetPlus
-out <- snpnet(
-  genotype.dir = genotype.dir,
+fit_snpnet <- snpnet(
+  genotype.pfile = genotype.pfile,
   phenotype.file = phenotype.file,
-  phenotype = "QPHE",
-  covariates = c("age", "sex", paste0("PC", 1:10)),
-  family = "gaussian",
-  standardize.variant = FALSE,
-  niter = 2,
-  validation = FALSE,
-  configs = configs,
-  use.glmnetPlus = TRUE,
-  verbose = FALSE,
-  save = FALSE,
-  glmnet.thresh = 1e-12
+  phenotype = phenotype,
+  covariates = covariates,
+  configs = configs
 )
 ```
-
-They are identical.
-```{r}
-out_default$configs <- out_default$configs[order(names(out_default$configs))]
-out$configs <- out$configs[order(names(out$configs))]
-identical(out_default, out)
-```
-
-
 
 We can then take a look at the coefficients and the metric.
 ```{r}
-str(out$a0)
-str(out$beta)
+str(fit_snpnet$a0)
+str(fit_snpnet$beta)
 ```
 
 ```{r}
-out$metric.train
+fit_snpnet$metric.train
 ```
 
 The `NAs` correspond to unfinished $\lambda$ values. We don't have to compute the entire solution path if a validation set is provided and an optimal solution has been found.
@@ -137,24 +95,38 @@ The `NAs` correspond to unfinished $\lambda$ values. We don't have to compute th
 We may want to compare with `glmnet` solution.
 
 ```{r}
-library(data.table)
-library(glmnet)
+configs <- list(
+  plink2.path = "plink2",   # path to plink2 program
+  zstdcat.path = "zstdcat"  # path to zstdcat program
+)
+for (name in names(configs)) {
+  tryCatch(system(paste(configs[[name]], "-h"), ignore.stdout = T),
+    condition = function(e) cat("Please add", configs[[name]], "to PATH, or modify the path in the configs list.")
+  )
+}
+```
 
-chr <- BEDMatrixPlus(paste0(genotype.dir, "train.bed"))
-data.X <- chr[, ]
+```{r}
+ids <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))
+phe <- readPheMaster(phenotype.file, ids, "gaussian", covariates, phenotype, NULL, NULL)
+vars <- readRDS(system.file("extdata", "vars.rds", package = "snpnet"))
+pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
+pgen <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar = pvar, sample_subset = NULL)
+data.X <- pgenlibr::ReadList(pgen, seq_along(vars), meanimpute=F)
+colnames(data.X) <- vars
 p <- ncol(data.X)
 pnas <- numeric(p)
 for (j in 1:p) {
   pnas[j] <- mean(is.na(data.X[, j]))
   data.X[is.na(data.X[, j]), j] <- mean(data.X[, j], na.rm = T)
 }
-sum(pnas > configs$missing.rate)
-phe <- fread(phenotype.file)
+
 data.X <- as.matrix(cbind(age = phe$age, sex = phe$sex, phe[, paste("PC", 1:10, sep = "")], data.X))
 data.y <- phe$QPHE
 pfactor <- rep(1, p + 12)
 pfactor[1:12] <- 0
-fit <- glmnet(data.X, data.y, penalty.factor = pfactor, standardize = F, thresh = 1e-12)
+
+fit_glmnet <- glmnet::glmnet(data.X, data.y, penalty.factor = pfactor, standardize = F, thresh = 1e-12)
 ```
 
 ```{r}
@@ -172,11 +144,11 @@ checkDiff <- function(x, y) {
 We show the difference of the computed $\lambda$ sequence and estimated coefficients. Due to the convergence threshold and slightly different updating rule, there is small discrepancy between the two solutions. The gap will shrink and eventually goes to 0 if we keep on tightening the threshold. 
 
 ```{r}
-max(abs(fit$lambda - out$full.lambda))
+max(abs(fit_snpnet$full.lams - fit_glmnet$lambda))
 ```
 
 ```{r}
-checkDiff(out$beta[[6]], fit$beta[, 6])
+checkDiff(fit_snpnet$beta[[6]], fit_glmnet$beta[, 6])
 ```
 
 

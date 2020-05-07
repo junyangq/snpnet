@@ -21,7 +21,7 @@ computeLambdas <- function(score, nlambda, lambda.min.ratio) {
 inferFamily <- function(phe, phenotype, status){
     if (all(unique(phe[[phenotype]] %in% c(0, 1, 2, -9)))) {
         family <- "binomial"
-    } else if(status %in% colnames(phe)) {
+    } else if(!is.null(status) && (status %in% colnames(phe))) {
         family <- "cox"
     } else {
         family <- "gaussian"
@@ -29,6 +29,7 @@ inferFamily <- function(phe, phenotype, status){
     family
 }
 
+#' @export
 readIDsFromPsam <- function(psam){
     df <- data.table::fread(psam) %>%
     dplyr::rename('FID' = '#FID') %>%
@@ -36,6 +37,7 @@ readIDsFromPsam <- function(psam){
     df$ID
 }
 
+#' @export
 readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col){
     if(family == 'cox' || is.null(family)){
         selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
@@ -58,7 +60,7 @@ readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotyp
     rownames(phe.master) <- phe.master$ID
 
     # focus on individuals with non-missing values.
-    if(is.na(split.col)){
+    if(is.null(split.col)){
         phe.no.missing.IDs <- phe.master$ID[ 
             (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
             (!is.na(phe.master[[phenotype]])) &
