@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Junyang Qian and Trevor Hastie" />
+
+<meta name="date" content="2020-05-07" />
+
+<title>Snpnet Vignette</title>
+
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+div.sourceCode { overflow-x: auto; }
+table.sourceCode, tr.sourceCode, td.lineNumbers, td.sourceCode {
+  margin: 0; padding: 0; vertical-align: baseline; border: none; }
+table.sourceCode { width: 100%; line-height: 100%; }
+td.lineNumbers { text-align: right; padding-right: 4px; padding-left: 4px; color: #aaaaaa; border-right: 1px solid #aaaaaa; }
+td.sourceCode { padding-left: 5px; }
+code > span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code > span.dt { color: #902000; } /* DataType */
+code > span.dv { color: #40a070; } /* DecVal */
+code > span.bn { color: #40a070; } /* BaseN */
+code > span.fl { color: #40a070; } /* Float */
+code > span.ch { color: #4070a0; } /* Char */
+code > span.st { color: #4070a0; } /* String */
+code > span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code > span.ot { color: #007020; } /* Other */
+code > span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code > span.fu { color: #06287e; } /* Function */
+code > span.er { color: #ff0000; font-weight: bold; } /* Error */
+code > span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+code > span.cn { color: #880000; } /* Constant */
+code > span.sc { color: #4070a0; } /* SpecialChar */
+code > span.vs { color: #4070a0; } /* VerbatimString */
+code > span.ss { color: #bb6688; } /* SpecialString */
+code > span.im { } /* Import */
+code > span.va { color: #19177c; } /* Variable */
+code > span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code > span.op { color: #666666; } /* Operator */
+code > span.bu { } /* BuiltIn */
+code > span.ex { } /* Extension */
+code > span.pp { color: #bc7a00; } /* Preprocessor */
+code > span.at { color: #7d9029; } /* Attribute */
+code > span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code > span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code > span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<link href="data:text/css;charset=utf-8,body%20%7B%0Abackground%2Dcolor%3A%20%23fff%3B%0Amargin%3A%201em%20auto%3B%0Amax%2Dwidth%3A%20700px%3B%0Aoverflow%3A%20visible%3B%0Apadding%2Dleft%3A%202em%3B%0Apadding%2Dright%3A%202em%3B%0Afont%2Dfamily%3A%20%22Open%20Sans%22%2C%20%22Helvetica%20Neue%22%2C%20Helvetica%2C%20Arial%2C%20sans%2Dserif%3B%0Afont%2Dsize%3A%2014px%3B%0Aline%2Dheight%3A%201%2E35%3B%0A%7D%0A%23TOC%20%7B%0Aclear%3A%20both%3B%0Amargin%3A%200%200%2010px%2010px%3B%0Apadding%3A%204px%3B%0Awidth%3A%20400px%3B%0Aborder%3A%201px%20solid%20%23CCCCCC%3B%0Aborder%2Dradius%3A%205px%3B%0Abackground%2Dcolor%3A%20%23f6f6f6%3B%0Afont%2Dsize%3A%2013px%3B%0Aline%2Dheight%3A%201%2E3%3B%0A%7D%0A%23TOC%20%2Etoctitle%20%7B%0Afont%2Dweight%3A%20bold%3B%0Afont%2Dsize%3A%2015px%3B%0Amargin%2Dleft%3A%205px%3B%0A%7D%0A%23TOC%20ul%20%7B%0Apadding%2Dleft%3A%2040px%3B%0Amargin%2Dleft%3A%20%2D1%2E5em%3B%0Amargin%2Dtop%3A%205px%3B%0Amargin%2Dbottom%3A%205px%3B%0A%7D%0A%23TOC%20ul%20ul%20%7B%0Amargin%2Dleft%3A%20%2D2em%3B%0A%7D%0A%23TOC%20li%20%7B%0Aline%2Dheight%3A%2016px%3B%0A%7D%0Atable%20%7B%0Amargin%3A%201em%20auto%3B%0Aborder%2Dwidth%3A%201px%3B%0Aborder%2Dcolor%3A%20%23DDDDDD%3B%0Aborder%2Dstyle%3A%20outset%3B%0Aborder%2Dcollapse%3A%20collapse%3B%0A%7D%0Atable%20th%20%7B%0Aborder%2Dwidth%3A%202px%3B%0Apadding%3A%205px%3B%0Aborder%2Dstyle%3A%20inset%3B%0A%7D%0Atable%20td%20%7B%0Aborder%2Dwidth%3A%201px%3B%0Aborder%2Dstyle%3A%20inset%3B%0Aline%2Dheight%3A%2018px%3B%0Apadding%3A%205px%205px%3B%0A%7D%0Atable%2C%20table%20th%2C%20table%20td%20%7B%0Aborder%2Dleft%2Dstyle%3A%20none%3B%0Aborder%2Dright%2Dstyle%3A%20none%3B%0A%7D%0Atable%20thead%2C%20table%20tr%2Eeven%20%7B%0Abackground%2Dcolor%3A%20%23f7f7f7%3B%0A%7D%0Ap%20%7B%0Amargin%3A%200%2E5em%200%3B%0A%7D%0Ablockquote%20%7B%0Abackground%2Dcolor%3A%20%23f6f6f6%3B%0Apadding%3A%200%2E25em%200%2E75em%3B%0A%7D%0Ahr%20%7B%0Aborder%2Dstyle%3A%20solid%3B%0Aborder%3A%20none%3B%0Aborder%2Dtop%3A%201px%20solid%20%23777%3B%0Amargin%3A%2028px%200%3B%0A%7D%0Adl%20%7B%0Amargin%2Dleft%3A%200%3B%0A%7D%0Adl%20dd%20%7B%0Amargin%2Dbottom%3A%2013px%3B%0Amargin%2Dleft%3A%2013px%3B%0A%7D%0Adl%20dt%20%7B%0Afont%2Dweight%3A%20bold%3B%0A%7D%0Aul%20%7B%0Amargin%2Dtop%3A%200%3B%0A%7D%0Aul%20li%20%7B%0Alist%2Dstyle%3A%20circle%20outside%3B%0A%7D%0Aul%20ul%20%7B%0Amargin%2Dbottom%3A%200%3B%0A%7D%0Apre%2C%20code%20%7B%0Abackground%2Dcolor%3A%20%23f7f7f7%3B%0Aborder%2Dradius%3A%203px%3B%0Acolor%3A%20%23333%3B%0Awhite%2Dspace%3A%20pre%2Dwrap%3B%20%0A%7D%0Apre%20%7B%0Aborder%2Dradius%3A%203px%3B%0Amargin%3A%205px%200px%2010px%200px%3B%0Apadding%3A%2010px%3B%0A%7D%0Apre%3Anot%28%5Bclass%5D%29%20%7B%0Abackground%2Dcolor%3A%20%23f7f7f7%3B%0A%7D%0Acode%20%7B%0Afont%2Dfamily%3A%20Consolas%2C%20Monaco%2C%20%27Courier%20New%27%2C%20monospace%3B%0Afont%2Dsize%3A%2085%25%3B%0A%7D%0Ap%20%3E%20code%2C%20li%20%3E%20code%20%7B%0Apadding%3A%202px%200px%3B%0A%7D%0Adiv%2Efigure%20%7B%0Atext%2Dalign%3A%20center%3B%0A%7D%0Aimg%20%7B%0Abackground%2Dcolor%3A%20%23FFFFFF%3B%0Apadding%3A%202px%3B%0Aborder%3A%201px%20solid%20%23DDDDDD%3B%0Aborder%2Dradius%3A%203px%3B%0Aborder%3A%201px%20solid%20%23CCCCCC%3B%0Amargin%3A%200%205px%3B%0A%7D%0Ah1%20%7B%0Amargin%2Dtop%3A%200%3B%0Afont%2Dsize%3A%2035px%3B%0Aline%2Dheight%3A%2040px%3B%0A%7D%0Ah2%20%7B%0Aborder%2Dbottom%3A%204px%20solid%20%23f7f7f7%3B%0Apadding%2Dtop%3A%2010px%3B%0Apadding%2Dbottom%3A%202px%3B%0Afont%2Dsize%3A%20145%25%3B%0A%7D%0Ah3%20%7B%0Aborder%2Dbottom%3A%202px%20solid%20%23f7f7f7%3B%0Apadding%2Dtop%3A%2010px%3B%0Afont%2Dsize%3A%20120%25%3B%0A%7D%0Ah4%20%7B%0Aborder%2Dbottom%3A%201px%20solid%20%23f7f7f7%3B%0Amargin%2Dleft%3A%208px%3B%0Afont%2Dsize%3A%20105%25%3B%0A%7D%0Ah5%2C%20h6%20%7B%0Aborder%2Dbottom%3A%201px%20solid%20%23ccc%3B%0Afont%2Dsize%3A%20105%25%3B%0A%7D%0Aa%20%7B%0Acolor%3A%20%230033dd%3B%0Atext%2Ddecoration%3A%20none%3B%0A%7D%0Aa%3Ahover%20%7B%0Acolor%3A%20%236666ff%3B%20%7D%0Aa%3Avisited%20%7B%0Acolor%3A%20%23800080%3B%20%7D%0Aa%3Avisited%3Ahover%20%7B%0Acolor%3A%20%23BB00BB%3B%20%7D%0Aa%5Bhref%5E%3D%22http%3A%22%5D%20%7B%0Atext%2Ddecoration%3A%20underline%3B%20%7D%0Aa%5Bhref%5E%3D%22https%3A%22%5D%20%7B%0Atext%2Ddecoration%3A%20underline%3B%20%7D%0A%0Acode%20%3E%20span%2Ekw%20%7B%20color%3A%20%23555%3B%20font%2Dweight%3A%20bold%3B%20%7D%20%0Acode%20%3E%20span%2Edt%20%7B%20color%3A%20%23902000%3B%20%7D%20%0Acode%20%3E%20span%2Edv%20%7B%20color%3A%20%2340a070%3B%20%7D%20%0Acode%20%3E%20span%2Ebn%20%7B%20color%3A%20%23d14%3B%20%7D%20%0Acode%20%3E%20span%2Efl%20%7B%20color%3A%20%23d14%3B%20%7D%20%0Acode%20%3E%20span%2Ech%20%7B%20color%3A%20%23d14%3B%20%7D%20%0Acode%20%3E%20span%2Est%20%7B%20color%3A%20%23d14%3B%20%7D%20%0Acode%20%3E%20span%2Eco%20%7B%20color%3A%20%23888888%3B%20font%2Dstyle%3A%20italic%3B%20%7D%20%0Acode%20%3E%20span%2Eot%20%7B%20color%3A%20%23007020%3B%20%7D%20%0Acode%20%3E%20span%2Eal%20%7B%20color%3A%20%23ff0000%3B%20font%2Dweight%3A%20bold%3B%20%7D%20%0Acode%20%3E%20span%2Efu%20%7B%20color%3A%20%23900%3B%20font%2Dweight%3A%20bold%3B%20%7D%20%0Acode%20%3E%20span%2Eer%20%7B%20color%3A%20%23a61717%3B%20background%2Dcolor%3A%20%23e3d2d2%3B%20%7D%20%0A" rel="stylesheet" type="text/css" />
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Snpnet Vignette</h1>
+<h4 class="author">Junyang Qian and Trevor Hastie</h4>
+<h4 class="date">2020-05-07</h4>
+
+
+
+<div id="introduction" class="section level3">
+<h3>Introduction</h3>
+<p>Snpnet is a package that is used to fit the lasso on big genomics data. We assume the data are stored in .pgen/.pvar/.psam format by the <a href="https://www.cog-genomics.org/plink/2.0/formats#pgen">PLINK library</a>. The potential training/validation split can be specified with a separate column in the phenotype file.</p>
+<p>The most essential parameters in the core function <code>snpnet</code> include:</p>
+<ul>
+<li><code>genotype.pfile</code>: the PLINK 2.0 pgen file that contains genotype. We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.</li>
+<li><code>phenotype.file</code>: the path of the file that contains the phenotype values and can be read as a table.</li>
+<li><code>phenotype</code>: the name of the phenotype. Must be the same as the corresponding column name in the phenotype file.</li>
+<li><code>covariates</code>: a character vector containing the names of the covariates included in the lasso fitting, whose coefficients will not be penalized. The names must exist in the column names of the phenotype file.</li>
+<li><code>family</code>: the type of the phenotype: “gaussian”, “binomial” or “cox”. If not provided or NULL, it will be detected based on the number of levels in the response.</li>
+<li><code>alpha</code>: the elastic-net mixing parameter, where the penalty is defined as <span class="math inline">\(\alpha \cdot \|\beta\|_1 + (1-\alpha) \cdot \|\beta\|_2^2/2\)</span>. <code>alpha = 1</code> corresponds to the lasso penalty, while <code>alpha = 0</code> corresponds to the ridge penalty.</li>
+<li><code>split.col</code>: the column name in the phenotype file that specifies the membership of individuals to the training or the validation set. The individuals marked as <code>&quot;train&quot;</code> and <code>&quot;val&quot;</code> will be treated as the training and validation set, respectively. When specified, the model performance is evaluated on both the training and the validation sets.</li>
+<li><code>status.col</code>: the column name for the status column for Cox proportional hazards model. When running the Cox model, the specified column must exist in the phenotype file.</li>
+<li><code>mem</code>: Memory (MB) available for the program. It tells PLINK 2.0 the amount of memory it can harness for the computation. IMPORTANT if using a job scheduler.</li>
+</ul>
+<p>Some additional important parameters for model building include:</p>
+<ul>
+<li><code>nlambda</code>: the number of lambda values on the solution path.</li>
+<li><code>lambda.min.ratio</code>: the ratio of the minimum lambda considered versus the maximum lambda that makes all penalized coefficients zero.</li>
+<li><code>p.factor</code>: a named vector of separate penalty factors applied to each coefficient. This is a number that multiplies lambda to allow different shrinkage. If not provided, default is 1 for all variables. Otherwise should be complete and positive for all variables.</li>
+</ul>
+<p>The other parameters can be specified in a config list object, such as <code>missing.rate</code>, <code>MAF.thresh</code>, <code>nCores</code>, <code>num.snps.batch</code> (batch size M of the BASIL algorithm), <code>save</code> (whether to save intermediate results), <code>results.dir</code>, <code>prevIter</code> (when starting from the middle), <code>use.glmnetPlus</code> and <code>glmnet.thresh</code> (convergence threshold). More details can be seen in the function documentation. In particular, If we want to recover results and continue the procedure from a previous job, we should have <code>save = TRUE</code> and specify <code>prevIter</code> with the index of the last successful (and saved) iteration.</p>
+<p>Snpnet depends on two other programs <strong>plink2</strong> and <strong>zstdcat</strong>. If they are not already on the system serach path, it is important to specify their locations in the <code>configs</code> object and pass it to <code>snpnet</code>.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">configs &lt;-<span class="st"> </span><span class="kw">list</span>(
+  <span class="dt">plink2.path =</span> <span class="st">&quot;plink2&quot;</span>,   <span class="co"># path to plink2 program</span>
+  <span class="dt">zstdcat.path =</span> <span class="st">&quot;zstdcat&quot;</span>  <span class="co"># path to zstdcat program</span>
+)
+<span class="co"># check if the provided paths are valid</span>
+<span class="cf">for</span> (name <span class="cf">in</span> <span class="kw">names</span>(configs)) {
+  <span class="kw">tryCatch</span>(<span class="kw">system</span>(<span class="kw">paste</span>(configs[[name]], <span class="st">&quot;-h&quot;</span>), <span class="dt">ignore.stdout =</span> T),
+    <span class="dt">condition =</span> <span class="cf">function</span>(e) <span class="kw">cat</span>(<span class="st">&quot;Please add&quot;</span>, configs[[name]], <span class="st">&quot;to PATH, or modify the path in the configs list.&quot;</span>)
+  )
+}</code></pre></div>
+</div>
+<div id="a-simple-example" class="section level3">
+<h3>A Simple Example</h3>
+<p>We demonstrate a simple lasso example first.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(snpnet)</code></pre></div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">genotype.pfile &lt;-<span class="st"> </span><span class="kw">file.path</span>(<span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;snpnet&quot;</span>), <span class="st">&quot;sample&quot;</span>)
+phenotype.file &lt;-<span class="st"> </span><span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="st">&quot;sample.phe&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;snpnet&quot;</span>)
+phenotype &lt;-<span class="st"> &quot;QPHE&quot;</span>
+covariates &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;age&quot;</span>, <span class="st">&quot;sex&quot;</span>, <span class="kw">paste0</span>(<span class="st">&quot;PC&quot;</span>, <span class="dv">1</span><span class="op">:</span><span class="dv">10</span>))
+
+fit_snpnet &lt;-<span class="st"> </span><span class="kw">snpnet</span>(  
+  <span class="dt">genotype.pfile =</span> genotype.pfile,
+  <span class="dt">phenotype.file =</span> phenotype.file,
+  <span class="dt">phenotype =</span> phenotype,
+  <span class="dt">covariates =</span> covariates,
+  <span class="dt">configs =</span> configs
+)  <span class="co"># we hide the intermediate messages</span></code></pre></div>
+<p>The intercept and coefficients can be extracted by <code>fit_snpnet$a0</code> and <code>fit_snpnet$beta</code>. It also saves the evaluation metric, which by default is <span class="math inline">\(R^2\)</span> for the Gaussian family.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">fit_snpnet<span class="op">$</span>metric.train
+<span class="co">#&gt;   [1] 0.2089871 0.2104402 0.2129640 0.2163671 0.2203983 0.2245927 0.2297627</span>
+<span class="co">#&gt;   [8] 0.2358391 0.2423690 0.2491165 0.2566939 0.2652310 0.2730096 0.2813346</span>
+<span class="co">#&gt;  [15] 0.2910509 0.3017561 0.3136223 0.3265565 0.3395117 0.3528559 0.3672129</span>
+<span class="co">#&gt;  [22] 0.3826513 0.3984702 0.4149482 0.4320622 0.4499550 0.4681395 0.4868573</span>
+<span class="co">#&gt;  [29] 0.5063165 0.5255936 0.5445475 0.5634130 0.5826291 0.6016155 0.6202583</span>
+<span class="co">#&gt;  [36] 0.6387452 0.6569201 0.6746515 0.6916680 0.7083095 0.7246041 0.7404483</span>
+<span class="co">#&gt;  [43] 0.7556963 0.7702659 0.7841292 0.7973795 0.8099013 0.8218621 0.8332552</span>
+<span class="co">#&gt;  [50] 0.8441034 0.8545183 0.8643099 0.8735285 0.8822317 0.8904601 0.8981543</span>
+<span class="co">#&gt;  [57] 0.9054622 0.9123111 0.9187217 0.9247878 0.9303812 0.9355430 0.9402540</span>
+<span class="co">#&gt;  [64] 0.9446735 0.9488678 0.9527262 0.9562351 0.9595308 0.9626171 0.9655038</span>
+<span class="co">#&gt;  [71] 0.9681871 0.9706793 0.9729908 0.9751322 0.9771209 0.9789609 0.9806068</span>
+<span class="co">#&gt;  [78] 0.9821547 0.9835932 0.9849168 0.9861369 0.9872630 0.9883033 0.9892658</span>
+<span class="co">#&gt;  [85] 0.9901059 0.9909487 0.9916699 0.9923515 0.9929845 0.9935694 0.9940606</span>
+<span class="co">#&gt;  [92] 0.9945264 0.9949655 0.9953755 0.9957552 0.9961060 0.9964293 0.9967272</span>
+<span class="co">#&gt;  [99] 0.9970012 0.9972531</span></code></pre></div>
+<p>The <code>NAs</code> correspond to the unfinished <span class="math inline">\(\lambda\)</span> values. We don’t have to compute the entire solution path if a validation set is provided and an optimal solution has been found.</p>
+</div>
+<div id="comparison-with-glmnet" class="section level3">
+<h3>Comparison with Glmnet</h3>
+<p>To compare with <strong>glmnet</strong>, we need to convert the genotype data into a normal R object.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ids &lt;-<span class="st"> </span><span class="kw">readIDsFromPsam</span>(<span class="kw">paste0</span>(genotype.pfile, <span class="st">'.psam'</span>))
+phe &lt;-<span class="st"> </span><span class="kw">readPheMaster</span>(phenotype.file, ids, <span class="st">&quot;gaussian&quot;</span>, covariates, phenotype, <span class="ot">NULL</span>, <span class="ot">NULL</span>)
+vars &lt;-<span class="st"> </span><span class="kw">readRDS</span>(<span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="st">&quot;vars.rds&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;snpnet&quot;</span>))
+pvar &lt;-<span class="st"> </span>pgenlibr<span class="op">::</span><span class="kw">NewPvar</span>(<span class="kw">paste0</span>(genotype.pfile, <span class="st">'.pvar.zst'</span>))
+pgen &lt;-<span class="st"> </span>pgenlibr<span class="op">::</span><span class="kw">NewPgen</span>(<span class="kw">paste0</span>(genotype.pfile, <span class="st">'.pgen'</span>), <span class="dt">pvar =</span> pvar, <span class="dt">sample_subset =</span> <span class="ot">NULL</span>)
+data.X &lt;-<span class="st"> </span>pgenlibr<span class="op">::</span><span class="kw">ReadList</span>(pgen, <span class="kw">seq_along</span>(vars), <span class="dt">meanimpute=</span>F)
+<span class="kw">colnames</span>(data.X) &lt;-<span class="st"> </span>vars
+p &lt;-<span class="st"> </span><span class="kw">ncol</span>(data.X)
+pnas &lt;-<span class="st"> </span><span class="kw">numeric</span>(p)
+<span class="cf">for</span> (j <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span>p) {
+  pnas[j] &lt;-<span class="st"> </span><span class="kw">mean</span>(<span class="kw">is.na</span>(data.X[, j]))
+  data.X[<span class="kw">is.na</span>(data.X[, j]), j] &lt;-<span class="st"> </span><span class="kw">mean</span>(data.X[, j], <span class="dt">na.rm =</span> T)  <span class="co"># mean imputation</span>
+}</code></pre></div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">data.X &lt;-<span class="st"> </span><span class="kw">as.matrix</span>(<span class="kw">cbind</span>(<span class="dt">age =</span> phe<span class="op">$</span>age, <span class="dt">sex =</span> phe<span class="op">$</span>sex, phe[, <span class="kw">paste</span>(<span class="st">&quot;PC&quot;</span>, <span class="dv">1</span><span class="op">:</span><span class="dv">10</span>, <span class="dt">sep =</span> <span class="st">&quot;&quot;</span>)], data.X))
+data.y &lt;-<span class="st"> </span>phe<span class="op">$</span>QPHE
+pfactor &lt;-<span class="st"> </span><span class="kw">rep</span>(<span class="dv">1</span>, p <span class="op">+</span><span class="st"> </span><span class="dv">12</span>)
+pfactor[<span class="dv">1</span><span class="op">:</span><span class="dv">12</span>] &lt;-<span class="st"> </span><span class="dv">0</span>  <span class="co"># we don't penalize the covariates</span>
+
+fit_glmnet &lt;-<span class="st"> </span>glmnet<span class="op">::</span><span class="kw">glmnet</span>(data.X, data.y, <span class="dt">penalty.factor =</span> pfactor, <span class="dt">standardize =</span> F)</code></pre></div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="co"># check difference of coefficients matched by the names</span>
+checkDiff &lt;-<span class="st"> </span><span class="cf">function</span>(x, y) {
+  unames &lt;-<span class="st"> </span><span class="kw">union</span>(<span class="kw">names</span>(x), <span class="kw">names</span>(y))
+  xf &lt;-<span class="st"> </span>yf &lt;-<span class="st"> </span><span class="kw">rep</span>(<span class="dv">0</span>, <span class="kw">length</span>(unames))
+  <span class="kw">names</span>(xf) &lt;-<span class="st"> </span><span class="kw">names</span>(yf) &lt;-<span class="st"> </span>unames
+  xf[<span class="kw">match</span>(<span class="kw">names</span>(x), unames)] &lt;-<span class="st"> </span>x
+  yf[<span class="kw">match</span>(<span class="kw">names</span>(y), unames)] &lt;-<span class="st"> </span>y
+  <span class="kw">list</span>(<span class="dt">max =</span> <span class="kw">max</span>(<span class="kw">abs</span>(xf<span class="op">-</span>yf)), <span class="dt">mean =</span> <span class="kw">mean</span>(<span class="kw">abs</span>(xf<span class="op">-</span>yf)))
+}</code></pre></div>
+<p>We show the difference of the computed <span class="math inline">\(\lambda\)</span> sequence and the estimated coefficients. There is small discrepancy between the two solutions within the range of convergence threshold. The gap will shrink and eventually goes to 0 if we keep on tightening the threshold.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">max</span>(<span class="kw">abs</span>(fit_snpnet<span class="op">$</span>full.lams <span class="op">-</span><span class="st"> </span>fit_glmnet<span class="op">$</span>lambda))
+<span class="co">#&gt; [1] 0.0001816286</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">checkDiff</span>(fit_snpnet<span class="op">$</span>beta[[<span class="dv">6</span>]], fit_glmnet<span class="op">$</span>beta[, <span class="dv">6</span>])
+<span class="co">#&gt; $max</span>
+<span class="co">#&gt; [1] 4.280143e-07</span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; $mean</span>
+<span class="co">#&gt; [1] 1.75303e-10</span></code></pre></div>
+</div>
+<div id="more-examples" class="section level3">
+<h3>More Examples</h3>
+<p>We also show two more sophisticated usage of the <code>snpnet</code> function.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">configs[[<span class="st">&quot;nCores&quot;</span>]] &lt;-<span class="st"> </span><span class="dv">2</span>
+configs[[<span class="st">&quot;num.snps.batch&quot;</span>]] &lt;-<span class="st"> </span><span class="dv">500</span>
+fit_snpnet_ent &lt;-<span class="st"> </span><span class="kw">snpnet</span>(
+  <span class="dt">genotype.pfile =</span> genotype.pfile,
+  <span class="dt">phenotype.file =</span> phenotype.file,
+  <span class="dt">phenotype =</span> phenotype,
+  <span class="dt">covariates =</span> covariates,
+  <span class="dt">alpha =</span> <span class="fl">0.5</span>,  <span class="co"># elastic-net</span>
+  <span class="dt">split.col =</span> <span class="st">&quot;split&quot;</span>,  <span class="co"># the sample phenotype file contains a column specifying the training/validation subsets</span>
+  <span class="dt">configs =</span> configs
+)</code></pre></div>
+<p>When <code>split.col</code> is specified, validation metric will automatically be computed. Moreover, by default, early stopping is adopted to stop the process based on the validation metric (the extent controlled by <code>stopping.lag</code> in <code>configs</code> object).</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">fit_snpnet_ent<span class="op">$</span>metric.train
+<span class="co">#&gt;   [1] 0.2115936 0.2126226 0.2136493 0.2156094 0.2196077 0.2245383 0.2297587</span>
+<span class="co">#&gt;   [8] 0.2351583 0.2419546 0.2504558 0.2604812 0.2710511 0.2817251 0.2925574</span>
+<span class="co">#&gt;  [15] 0.3037298 0.3157702 0.3286286 0.3426865 0.3589287 0.3764867 0.3944012</span>
+<span class="co">#&gt;  [22] 0.4131001 0.4327160 0.4532889 0.4743553 0.4952979 0.5161484 0.5370624</span>
+<span class="co">#&gt;  [29] 0.5580632 0.5787104        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [36]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [43]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [50]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [57]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [64]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [71]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [78]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [85]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [92]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [99]        NA        NA</span>
+fit_snpnet_ent<span class="op">$</span>metric.val
+<span class="co">#&gt;   [1] 0.1945321 0.1949240 0.1953680 0.1972871 0.2012808 0.2060132 0.2110831</span>
+<span class="co">#&gt;   [8] 0.2164552 0.2225488 0.2301934 0.2379852 0.2451726 0.2521224 0.2587086</span>
+<span class="co">#&gt;  [15] 0.2646035 0.2700385 0.2747830 0.2788710 0.2825376 0.2862595 0.2894939</span>
+<span class="co">#&gt;  [22] 0.2917946 0.2930747 0.2950071 0.2964086 0.2967521 0.2968687 0.2963385</span>
+<span class="co">#&gt;  [29] 0.2951664 0.2941304        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [36]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [43]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [50]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [57]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [64]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [71]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [78]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [85]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [92]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [99]        NA        NA</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">fit_snpnet_bin &lt;-<span class="st"> </span><span class="kw">snpnet</span>(
+  <span class="dt">genotype.pfile =</span> genotype.pfile,
+  <span class="dt">phenotype.file =</span> phenotype.file,
+  <span class="dt">phenotype =</span> <span class="st">&quot;BPHE&quot;</span>,  <span class="co"># binary phenotype with logistic regression</span>
+  <span class="dt">covariates =</span> covariates,
+  <span class="dt">alpha =</span> <span class="fl">0.5</span>,
+  <span class="dt">family =</span> <span class="st">&quot;binomial&quot;</span>,
+  <span class="dt">split.col =</span> <span class="st">&quot;split&quot;</span>,
+  <span class="dt">configs =</span> configs
+)</code></pre></div>
+<p>For binary phenotypes, instead of <span class="math inline">\(R^2\)</span>, AUC is computed.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">fit_snpnet_bin<span class="op">$</span>metric.train
+<span class="co">#&gt;   [1] 0.6790872 0.6802187 0.6812283 0.6822316 0.6830131 0.6840945 0.6847806</span>
+<span class="co">#&gt;   [8] 0.6856089 0.6865779 0.6883658 0.6917791 0.6959206 0.7002607 0.7068997</span>
+<span class="co">#&gt;  [15] 0.7145858 0.7240395 0.7354499 0.7491092 0.7632139 0.7789503 0.7960307</span>
+<span class="co">#&gt;  [22] 0.8131455 0.8300602 0.8470046 0.8637178        NA        NA        NA</span>
+<span class="co">#&gt;  [29]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [36]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [43]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [50]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [57]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [64]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [71]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [78]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [85]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [92]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [99]        NA        NA</span>
+fit_snpnet_bin<span class="op">$</span>metric.val
+<span class="co">#&gt;   [1] 0.6557377 0.6566946 0.6575508 0.6582811 0.6589610 0.6598424 0.6600690</span>
+<span class="co">#&gt;   [8] 0.6607489 0.6609755 0.6612777 0.6623354 0.6627131 0.6642240 0.6663141</span>
+<span class="co">#&gt;  [15] 0.6681776 0.6691345 0.6695374 0.6712246 0.6716527 0.6713505 0.6719297</span>
+<span class="co">#&gt;  [22] 0.6700914 0.6672459 0.6653068 0.6619325        NA        NA        NA</span>
+<span class="co">#&gt;  [29]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [36]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [43]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [50]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [57]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [64]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [71]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [78]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [85]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [92]        NA        NA        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;  [99]        NA        NA</span></code></pre></div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

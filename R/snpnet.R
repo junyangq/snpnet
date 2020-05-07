@@ -22,7 +22,7 @@
 #'                   fitting, whose coefficients will not be penalized. The names must exist in the
 #'                   column names of the phenotype file.
 #' @param alpha the elastic-net mixing parameter, where the penalty is defined as
-#'              alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2.alpha = 1 corresponds to the lasso penalty,
+#'              alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2. alpha = 1 corresponds to the lasso penalty,
 #'              while alpha = 0 corresponds to the ridge penalty.
 #' @param nlambda the number of lambda values - default is 100.
 #' @param lambda.min.ratio smallest value for lambda, as a fraction of lambda.max, the (data derived) entry value,
@@ -61,7 +61,7 @@
 #'                              Needed when `save = TRUE`. Default is `"meta.dir/`.}
 #'                 \item{save.dir}{the relative path to the subdirectory used to store the intermediate
 #'                              results so that we may look into or recover from later.
-#'                              Needed when `save = TRUE`. Default is `"results.dir/`.}
+#'                              Needed when `save = TRUE`. Default is `"results/`.}
 #'                 \item{nlams.init}{the number of lambdas considered in the first iteration.
 #'                              Default 10 is a reasonable number to start with.}
 #'                 \item{nlams.delta}{the length of extended lambdas down the sequence when there are few
@@ -127,7 +127,9 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
       # For glmnet, we map this to 1/0 (case/control)
       # The following expression will replace -9 (missing) with -10, but
       # the set of individuals with no-missing values are already computed.
+    if (min(phe[['master']][[phenotype]], na.rm = T) >= 1 && max(phe[['master']][[phenotype]], na.rm = T) <= 2) {
       phe[['master']][[phenotype]] <- phe[['master']][[phenotype]] - 1
+    }
   }
 
   ### --- Define the set of individual IDs for training (and validation) set(s) --- ###
