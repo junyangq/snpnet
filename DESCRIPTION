@@ -4,9 +4,11 @@ Type: Package
 Title: snpnet: Efficient Lasso Solver for Large SNP Data
 Authors@R: c(
     person("Junyang", "Qian", email = "junyangq@stanford.edu", role = c("aut", "cre")),
-    person("Trevor", "Hastie", email = "hastie@stanford.edu", role = c("aut")),
-    person("Yosuke", "Tanigawa", email = "ytanigaw@stanford.edu", role = c("ctb")),
-    person("Ruilin", "Li", email = "ruilinli@stanford.edu", role = c("ctb"))
+    person("Trevor", "Hastie", role = c("aut")),
+    person("Yosuke", "Tanigawa", role = c("aut")),
+    person("Ruilin", "Li", role = c("ctb")),
+    person("Manuel", "Rivas", role = c("ctb")),
+    person("Chris", "Chang", role = c("ctb"))
     )
 Description: Fitting the entire lasso solution path on large-scale genotype-phenotype data.
 License: GPL-2
