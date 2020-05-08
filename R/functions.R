@@ -53,6 +53,7 @@ readPlinkKeepFile <- function(keep_file){
     keep_df %>% dplyr::pull(ID)
 }
 
+#' @export
 readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col, configs){
     if(family == 'cox' || is.null(family)){
         selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
