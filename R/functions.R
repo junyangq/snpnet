@@ -37,18 +37,37 @@ readIDsFromPsam <- function(psam){
     df$ID
 }
 
-#' @export
-readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col){
+cat_or_zcat <- function(filename, configs=list(zstdcat.path='zstdcat', zcat.path='zcat')){
+    if(str_ends(basename(filename), '.zst')){
+        return(configs[['zstdcat.path']])
+    }else if(str_ends(basename(filename), '.gz')){
+        return(configs[['zcat.path']])
+    }else{
+        return('cat')      
+    }
+}
+
+readPlinkKeepFile <- function(keep_file){
+    keep_df <- data.table::fread(keep_file, colClasses='character', stringsAsFactors=F)
+    keep_df$ID <- paste(keep_df$V1, keep_df$V2, sep = "_")
+    keep_df %>% dplyr::pull(ID)
+}
+
+readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col, configs){
     if(family == 'cox' || is.null(family)){
         selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
     } else{
         selectCols <- c("FID", "IID", covariates, phenotype, split.col)
     }
-    phe.master.unsorted <- data.table::fread(phenotype.file, colClasses = c("FID" = "character", "IID" = "character"), select = selectCols)
+
+    phe.master.unsorted <- data.table::fread(
+      cmd=paste(cat_or_zcat(phenotype.file, configs), phenotype.file, ' | sed -e "s/^#//g"'),
+      colClasses = c("FID" = "character", "IID" = "character"), select = selectCols
+    )
     phe.master.unsorted$ID <- paste(phe.master.unsorted$FID, phe.master.unsorted$IID, sep = "_")
 
     # make sure the phe.master has the same individual ordering as in the genotype data
-    # it seemed like the code is robust enought (as of 2019/11/13) but just want to be safe
+    # so that we don't have error when opening pgen file with sample subset option.
     phe.master <- phe.master.unsorted %>%
     dplyr::left_join(
         data.frame(ID = psam.ids, stringsAsFactors=F) %>%
@@ -60,20 +79,22 @@ readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotyp
     rownames(phe.master) <- phe.master$ID
 
     # focus on individuals with non-missing values.
-    if(is.null(split.col)){
-        phe.no.missing.IDs <- phe.master$ID[ 
-            (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
-            (!is.na(phe.master[[phenotype]])) &
-            (phe.master$ID %in% psam.ids) # check if we have genotype
-        ]
-    }else{
-        phe.no.missing.IDs <- phe.master$ID[ 
-            (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
-            (!is.na(phe.master[[phenotype]])) &
-            (phe.master$ID %in% psam.ids) & # check if we have genotype
-            (phe.master[[split.col]] %in% c('train', 'val')) # focus on individuals in training and validation set
-        ]
-    }  
+    phe.no.missing.IDs <- phe.master$ID[ 
+        (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
+        (!is.na(phe.master[[phenotype]])) &
+        (phe.master$ID %in% psam.ids) # check if we have genotype
+    ]
+    if(!is.null(split.col)){
+        # focus on individuals in training and validation set
+        phe.no.missing.IDs <- intersect(
+            phe.no.missing.IDs,
+            phe.master$ID[ (phe.master[[split.col]] %in% c('train', 'val')) ]
+        )
+    }
+    if(!is.null(configs[['keep']])){
+        # focus on individuals in the specified keep file
+        phe.no.missing.IDs <- intersect(phe.no.missing.IDs, readPlinkKeepFile(configs[['keep']]))
+    }
     checkMissingPhenoWarning(phe.master, phe.no.missing.IDs)
     
     phe.master[ phe.master$ID %in% phe.no.missing.IDs, ]
@@ -132,12 +153,12 @@ computeStats <- function(pfile, ids, configs) {
   }
     
   out <- list()
-  out[["pnas"]]  <- gcount_df %>% dplyr::select(stats_pNAs) %>% dplyr::pull()
-  out[["means"]] <- gcount_df %>% dplyr::select(stats_means) %>% dplyr::pull()
-  out[["sds"]]   <- gcount_df %>% dplyr::select(stats_SDs) %>% dplyr::pull()
+  out[["pnas"]]  <- gcount_df %>% dplyr::pull(stats_pNAs)
+  out[["means"]] <- gcount_df %>% dplyr::pull(stats_means)
+  out[["sds"]]   <- gcount_df %>% dplyr::pull(stats_SDs)
 
   for(key in names(out)){
-    names(out[[key]]) <- gcount_df %>% dplyr::select(ID) %>% dplyr::pull()
+      names(out[[key]]) <- gcount_df %>% dplyr::pull(ID)
   }    
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
   out[["excludeSNP"]] <- out[["excludeSNP"]][ ! is.na(out[["excludeSNP"]]) ]
@@ -407,7 +428,7 @@ checkGlmnetPlus <- function(use.glmnetPlus, family) {
     use.glmnetPlus
 }
 
-setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, family, alpha, nlambda, mem) {
+setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, covariates, alpha, nlambda, split.col, p.factor, status.col, mem){
     out.args <- as.list(environment())
     defaults <- list(
         missing.rate = 0.1, 
@@ -423,6 +444,7 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         early.stopping = TRUE,
         stopping.lag = 2,
         niter = 50,
+        keep = NULL,
         lambda.min.ratio = NULL,
         KKT.verbose = FALSE,
         use.glmnetPlus = NULL,
@@ -440,6 +462,7 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         metric=NULL,
         plink2.path='plink2',
         zstdcat.path='zstdcat',
+        zcat.path='zcat',
         rank = TRUE
     )
     out <- defaults
@@ -457,12 +480,10 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
     # update settings
     out[["early.stopping"]] <- ifelse(out[["early.stopping"]], out[['stopping.lag']], -1)
     if(is.null(out[['increase.size']]))  out[['increase.size']] <- out[['num.snps.batch']]/2
-    out[['use.glmnetPlus']] <- checkGlmnetPlus(out[['use.glmnetPlus']], family)
-        
-    if (is.null(out[['metric']])) out[['metric']] <- setDefaultMetric(family)
     
-    # We will write some intermediate files to meta.dir and save.dir.
-    # those files will be deleted with snpnet::cleanUpIntermediateFiles() function.
+    # configure the temp file locations
+    #   We will write some intermediate files to meta.dir and save.dir.
+    #   those files will be deleted with snpnet::cleanUpIntermediateFiles() function.
     if (is.null(out[['results.dir']])) out[['results.dir']] <- tempdir(check = TRUE)
     dir.create(file.path(out[['results.dir']], out[["meta.dir"]]), showWarnings = FALSE, recursive = T)
     dir.create(file.path(out[['results.dir']], out[["save.dir"]]), showWarnings = FALSE, recursive = T)
@@ -470,6 +491,14 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         out[['results.dir']], out[["meta.dir"]], out['gcount.basename.prefix']
     )
     
+    out
+}
+
+updateConfigsWithFamily <- function(configs, family){
+    out <- configs
+    out[['family']] <- family
+    out[['use.glmnetPlus']] <- checkGlmnetPlus(out[['use.glmnetPlus']], family)        
+    if (is.null(out[['metric']])) out[['metric']] <- setDefaultMetric(family)
     out
 }
                                  

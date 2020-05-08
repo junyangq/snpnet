@@ -47,6 +47,7 @@ cat <<- EOF
 	  --covariates (-c)  The list of covariates separated with ','
 	  --split_col  (-s)
 	  --status_col
+	  --keep             Specify a plink keep file to focus on a subset of individuals
 	  --no_save             Set save=F. This will tell snpnet::snpnet() to clean-up intermediate files.
 	  --save_computeProduct Set save_computeProduct=T (save the all intermediate files for snpnet::computeProduct() function)
 	  --verbose             Set vervose=T and KKT_verbose=T
@@ -82,6 +83,7 @@ alpha=1
 covariates="None"
 split_col="split"
 status_col="status"
+keep="NULL"
 save=T
 save_computeProduct=F
 KKT_verbose=F
@@ -124,6 +126,9 @@ for OPT in "$@" ; do
             ;;
         '--status_col' )
             status_col=$2 ; shift 2 ;            
+            ;;
+        '--keep' )
+            keep=$2 ; shift 2 ;            
             ;;
         '--no_save' )
             save="F" ; shift 1 ;            
@@ -191,6 +196,7 @@ cat <<- EOF | tr " " "\t" > ${config_file}
 	covariates ${covariates}
 	split.col ${split_col}
 	status.col ${status_col}
+	keep ${keep}
 	save ${save}
 	KKT.verbose ${KKT_verbose}
 	verbose ${verbose}
