@@ -12,7 +12,7 @@
 
 <meta name="author" content="Junyang Qian and Trevor Hastie" />
 
-<meta name="date" content="2020-05-07" />
+<meta name="date" content="2020-05-08" />
 
 <title>Snpnet Vignette</title>
 
@@ -95,7 +95,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 
 <h1 class="title toc-ignore">Snpnet Vignette</h1>
 <h4 class="author">Junyang Qian and Trevor Hastie</h4>
-<h4 class="date">2020-05-07</h4>
+<h4 class="date">2020-05-08</h4>
 
 
 
@@ -172,7 +172,7 @@ fit_snpnet &lt;-<span class="st"> </span><span class="kw">snpnet</span>(
 <h3>Comparison with Glmnet</h3>
 <p>To compare with <strong>glmnet</strong>, we need to convert the genotype data into a normal R object.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ids &lt;-<span class="st"> </span><span class="kw">readIDsFromPsam</span>(<span class="kw">paste0</span>(genotype.pfile, <span class="st">'.psam'</span>))
-phe &lt;-<span class="st"> </span><span class="kw">readPheMaster</span>(phenotype.file, ids, <span class="st">&quot;gaussian&quot;</span>, covariates, phenotype, <span class="ot">NULL</span>, <span class="ot">NULL</span>)
+phe &lt;-<span class="st"> </span><span class="kw">readPheMaster</span>(phenotype.file, ids, <span class="st">&quot;gaussian&quot;</span>, covariates, phenotype, <span class="ot">NULL</span>, <span class="ot">NULL</span>, configs)
 vars &lt;-<span class="st"> </span><span class="kw">readRDS</span>(<span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="st">&quot;vars.rds&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;snpnet&quot;</span>))
 pvar &lt;-<span class="st"> </span>pgenlibr<span class="op">::</span><span class="kw">NewPvar</span>(<span class="kw">paste0</span>(genotype.pfile, <span class="st">'.pvar.zst'</span>))
 pgen &lt;-<span class="st"> </span>pgenlibr<span class="op">::</span><span class="kw">NewPgen</span>(<span class="kw">paste0</span>(genotype.pfile, <span class="st">'.pgen'</span>), <span class="dt">pvar =</span> pvar, <span class="dt">sample_subset =</span> <span class="ot">NULL</span>)

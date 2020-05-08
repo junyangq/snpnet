@@ -92,7 +92,7 @@ To compare with **glmnet**, we need to convert the genotype data into a normal R
 
 ```{r}
 ids <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))
-phe <- readPheMaster(phenotype.file, ids, "gaussian", covariates, phenotype, NULL, NULL)
+phe <- readPheMaster(phenotype.file, ids, "gaussian", covariates, phenotype, NULL, NULL, configs)
 vars <- readRDS(system.file("extdata", "vars.rds", package = "snpnet"))
 pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
 pgen <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar = pvar, sample_subset = NULL)

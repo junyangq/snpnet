@@ -38,12 +38,12 @@ readIDsFromPsam <- function(psam){
 }
 
 cat_or_zcat <- function(filename, configs=list(zstdcat.path='zstdcat', zcat.path='zcat')){
-    if(str_ends(basename(filename), '.zst')){
+    if(stringr::str_ends(basename(filename), '.zst')){
         return(configs[['zstdcat.path']])
-    }else if(str_ends(basename(filename), '.gz')){
+    }else if(stringr::str_ends(basename(filename), '.gz')){
         return(configs[['zcat.path']])
     }else{
-        return('cat')      
+        return('cat')
     }
 }
 

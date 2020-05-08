@@ -4,21 +4,9 @@
 \alias{snpnet}
 \title{Fit the Lasso/Elastic-Net for Large Phenotype-Genotype Datasets}
 \usage{
-snpnet(
-  genotype.pfile,
-  phenotype.file,
-  phenotype,
-  family = NULL,
-  covariates = NULL,
-  alpha = 1,
-  nlambda = 100,
-  lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
-  split.col = NULL,
-  p.factor = NULL,
-  status.col = NULL,
-  mem = NULL,
-  configs = NULL
-)
+snpnet(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL, alpha
+  = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), split.col = NULL,
+  p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
 }
 \arguments{
 \item{genotype.pfile}{the PLINK 2.0 pgen file that contains genotype.
@@ -41,7 +29,7 @@ fitting, whose coefficients will not be penalized. The names must exist in the
 column names of the phenotype file.}
 
 \item{alpha}{the elastic-net mixing parameter, where the penalty is defined as
-alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2.alpha = 1 corresponds to the lasso penalty,
+alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2. alpha = 1 corresponds to the lasso penalty,
 while alpha = 0 corresponds to the ridge penalty.}
 
 \item{nlambda}{the number of lambda values - default is 100.}
@@ -87,13 +75,14 @@ harness for the computation. IMPORTANT if using a job scheduler.}
               Needed when `save = TRUE`. Default is `"meta.dir/`.}
  \item{save.dir}{the relative path to the subdirectory used to store the intermediate
               results so that we may look into or recover from later.
-              Needed when `save = TRUE`. Default is `"results.dir/`.}
+              Needed when `save = TRUE`. Default is `"results/`.}
  \item{nlams.init}{the number of lambdas considered in the first iteration.
               Default 10 is a reasonable number to start with.}
  \item{nlams.delta}{the length of extended lambdas down the sequence when there are few
               left in the current sequence (remember we don't fit all lambdas
               every iteration, only extend when most of the current ones have been completed and validated). Default is 5.}
  \item{glmnet.thresh}{the convergence threshold used in glmnet/glmnetPlus.}
+ \item{keep}{one may specify keep file in plink format to focus on a subset of individuals.}
  \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if
               the glmnetPlus package is available. Currently only "gaussian" family is supported.}
  \item{early.stopping}{a logical value indicating whether early stopping based on validation metric is desired.}
@@ -105,6 +94,7 @@ harness for the computation. IMPORTANT if using a job scheduler.}
               Default is half of the batch size.}
  \item{plink2.path}{the user-specified path to plink2 (default: plink2)}
  \item{zstdcat.path}{the user-specified path to zstdcat (default: zstdcat)}
+ \item{zcat.path}{the user-specified path to zcat (to read a zcat compressed phenotype file) (default: zdcat)}
  \item{rank}{if TRUE, then the smallest lambda indices when each variable enters the model are recorded}
 }}
 }

@@ -7,6 +7,10 @@
 #' "A Fast and Flexible Algorithm for Solving the Lasso in Large-scale and Ultrahigh-dimensional Problems."
 #' bioRxiv (2019): https://doi.org/10.1101/630079
 #'
+#' @usage snpnet(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL, alpha
+#'   = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), split.col = NULL,
+#'   p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
+#'
 #' @param genotype.pfile the PLINK 2.0 pgen file that contains genotype.
 #'                       We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.
 #' @param phenotype.file the path of the file that contains the phenotype values and can be read as
@@ -69,7 +73,7 @@
 #'                              every iteration, only extend when most of the current ones have been completed and validated). Default is 5.}
 #'                 \item{glmnet.thresh}{the convergence threshold used in glmnet/glmnetPlus.}
 #'                 \item{keep}{one may specify keep file in plink format to focus on a subset of individuals.}
-#'                 \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if 
+#'                 \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if
 #'                              the glmnetPlus package is available. Currently only "gaussian" family is supported.}
 #'                 \item{early.stopping}{a logical value indicating whether early stopping based on validation metric is desired.}
 #'                 \item{stopping.lag}{a parameter for the stopping criterion such that the procedure stops after
@@ -102,7 +106,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
   ids <- list(); phe <- list()
   ids[['psam']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))
 
-  ### --- combine the specified configs with the default values --- ###    
+  ### --- combine the specified configs with the default values --- ###
   configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, alpha, nlambda, split.col, p.factor, status.col, mem)
   if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
 
