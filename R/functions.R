@@ -12,7 +12,7 @@
 #' @param covariate_names Character vector of the names of the adjustment covariates.
 #' @param split_col Name of the split column. If NULL, all samples will be used.
 #' @param split_name Vector of split labels where prediction is to be made. Should be a combination of "train", "val", "test".
-#' @param idx Vector of lambda indices on which the prediction is to be made.
+#' @param idx Vector of lambda indices on which the prediction is to be made. If not provided, will predict on all lambdas found.
 #' @param family Type of the phenotype: "gaussian" for continuous phenotype and "binomial" for binary phenotype.
 #' @param snpnet_prefix Prefix of the snpnet result files used to construct the full path. Only if `saved_path` is specified.
 #' @param snpnet_suffix Extension suffix of the snpnet result files used to construct the full path. Only if `saved_path` is specified.

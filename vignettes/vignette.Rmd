@@ -84,7 +84,25 @@ The intercept and coefficients can be extracted by `fit_snpnet$a0` and `fit_snpn
 fit_snpnet$metric.train
 ```
 
-The `NAs` correspond to the unfinished $\lambda$ values. We don't have to compute the entire solution path if a validation set is provided and an optimal solution has been found.
+We can make prediction with the fitted object `fit_snpnet`. For example,
+```{r}
+pred_snpnet <- predict_snpnet(
+  fit = fit_snpnet,
+  new_genotype_file = genotype.pfile,
+  new_phenotype_file = phenotype.file,
+  phenotype = phenotype,
+  covariate_names = covariates,
+  split_col = "split",
+  split_name = c("train", "val"),  # can also include "test" if such samples are available in the phenotype file
+  configs = configs)
+```
+
+We can find out both the predicted values from the `prediction` field and the evaluation metrics from the `metric` field.
+
+```{r}
+str(pred_snpnet$prediction)
+str(pred_snpnet$metric)
+```
 
 ### Comparison with Glmnet
 

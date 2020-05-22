@@ -12,7 +12,7 @@
 
 <meta name="author" content="Junyang Qian and Trevor Hastie" />
 
-<meta name="date" content="2020-05-08" />
+<meta name="date" content="2020-05-22" />
 
 <title>Snpnet Vignette</title>
 
@@ -95,7 +95,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 
 <h1 class="title toc-ignore">Snpnet Vignette</h1>
 <h4 class="author">Junyang Qian and Trevor Hastie</h4>
-<h4 class="date">2020-05-08</h4>
+<h4 class="date">2020-05-22</h4>
 
 
 
@@ -166,7 +166,33 @@ fit_snpnet &lt;-<span class="st"> </span><span class="kw">snpnet</span>(
 <span class="co">#&gt;  [85] 0.9901059 0.9909487 0.9916699 0.9923515 0.9929845 0.9935694 0.9940606</span>
 <span class="co">#&gt;  [92] 0.9945264 0.9949655 0.9953755 0.9957552 0.9961060 0.9964293 0.9967272</span>
 <span class="co">#&gt;  [99] 0.9970012 0.9972531</span></code></pre></div>
-<p>The <code>NAs</code> correspond to the unfinished <span class="math inline">\(\lambda\)</span> values. We don’t have to compute the entire solution path if a validation set is provided and an optimal solution has been found.</p>
+<p>We can make prediction with the fitted object <code>fit_snpnet</code>. For example,</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">pred_snpnet &lt;-<span class="st"> </span><span class="kw">predict_snpnet</span>(
+  <span class="dt">fit =</span> fit_snpnet, 
+  <span class="dt">new_genotype_file =</span> genotype.pfile,
+  <span class="dt">new_phenotype_file =</span> phenotype.file,
+  <span class="dt">phenotype =</span> phenotype,
+  <span class="dt">covariate_names =</span> covariates,
+  <span class="dt">split_col =</span> <span class="st">&quot;split&quot;</span>,
+  <span class="dt">split_name =</span> <span class="kw">c</span>(<span class="st">&quot;train&quot;</span>, <span class="st">&quot;val&quot;</span>),  <span class="co"># can also include &quot;test&quot; if such samples are available in the phenotype file</span>
+  <span class="dt">configs =</span> configs)</code></pre></div>
+<p>We can find out both the predicted values from the <code>prediction</code> field and the evaluation metrics from the <code>metric</code> field.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">str</span>(pred_snpnet<span class="op">$</span>prediction)
+<span class="co">#&gt; List of 2</span>
+<span class="co">#&gt;  $ train: num [1:1600, 1:100] -0.0942 0.1855 -0.3101 -0.0924 0.1544 ...</span>
+<span class="co">#&gt;   ..- attr(*, &quot;dimnames&quot;)=List of 2</span>
+<span class="co">#&gt;   .. ..$ : chr [1:1600] &quot;per0_per0&quot; &quot;per1_per1&quot; &quot;per2_per2&quot; &quot;per3_per3&quot; ...</span>
+<span class="co">#&gt;   .. ..$ : chr [1:100] &quot;s0&quot; &quot;s1&quot; &quot;s2&quot; &quot;s3&quot; ...</span>
+<span class="co">#&gt;  $ val  : num [1:400, 1:100] -0.855 -0.0804 -0.838 0.0781 0.092 ...</span>
+<span class="co">#&gt;   ..- attr(*, &quot;dimnames&quot;)=List of 2</span>
+<span class="co">#&gt;   .. ..$ : chr [1:400] &quot;per4_per4&quot; &quot;per15_per15&quot; &quot;per20_per20&quot; &quot;per22_per22&quot; ...</span>
+<span class="co">#&gt;   .. ..$ : chr [1:100] &quot;s0&quot; &quot;s1&quot; &quot;s2&quot; &quot;s3&quot; ...</span>
+<span class="kw">str</span>(pred_snpnet<span class="op">$</span>metric)
+<span class="co">#&gt; List of 2</span>
+<span class="co">#&gt;  $ train: Named num [1:100] 0.211 0.212 0.215 0.218 0.222 ...</span>
+<span class="co">#&gt;   ..- attr(*, &quot;names&quot;)= chr [1:100] &quot;s0&quot; &quot;s1&quot; &quot;s2&quot; &quot;s3&quot; ...</span>
+<span class="co">#&gt;  $ val  : Named num [1:100] 0.2 0.202 0.206 0.21 0.215 ...</span>
+<span class="co">#&gt;   ..- attr(*, &quot;names&quot;)= chr [1:100] &quot;s0&quot; &quot;s1&quot; &quot;s2&quot; &quot;s3&quot; ...</span></code></pre></div>
 </div>
 <div id="comparison-with-glmnet" class="section level3">
 <h3>Comparison with Glmnet</h3>

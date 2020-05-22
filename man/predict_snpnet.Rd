@@ -48,7 +48,7 @@ must exist.}
 
 \item{split_name}{Vector of split labels where prediction is to be made. Should be a combination of "train", "val", "test".}
 
-\item{idx}{Vector of lambda indices on which the prediction is to be made.}
+\item{idx}{Vector of lambda indices on which the prediction is to be made. If not provided, will predict on all lambdas found.}
 
 \item{family}{Type of the phenotype: "gaussian" for continuous phenotype and "binomial" for binary phenotype.}
 
