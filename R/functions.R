@@ -1,49 +1,82 @@
+#' Predict from the Fitted Object or File
+#'
+#' @param fit Fitted object returned from the snpnet function. If not specified, `saved_path` has to be provided.
+#' @param saved_path Path to the file that saves the fit object. The full path is constructed as ${saved_path}/${snpnet_subdir}/${snpnet_prefix}ITER${snpnet_suffix}, where ITER will be the maximum index found in the snpnet subdirectory. If not specified, `fit` has to be provided.
+#' @param new_genotype_file Path to the new suite of genotype files. new_genotype_file.{pgen, psam, pvar.zst}.
+#'   must exist.
+#' @param new_phenotype_file Path to the phenotype. The header must include FID, IID. Used for extracting covaraites and computing metrics.
+#' @param phenotype Name of the phenotype for which the fit was computed.
+#' @param gcount_path Path to the saved gcount file on which the meta statistics can be computed. Only if `saved_path` is specified.
+#' @param meta_dir (Depreciated) Path to the saved meta statistics object. The full path is constructed as ${meta_dir}/${STAT}${meta_suffix}, where such files should exist for STAT = pnas, means and optionally sds. Only if `saved_path` is specified.
+#' @param meta_suffix (Depreciated) Extension suffix of the meta statistics files. Only if `saved_path` is specified.
+#' @param covariate_names Character vector of the names of the adjustment covariates.
+#' @param split_col Name of the split column. If NULL, all samples will be used.
+#' @param split_name Vector of split labels where prediction is to be made. Should be a combination of "train", "val", "test".
+#' @param idx Vector of lambda indices on which the prediction is to be made.
+#' @param family Type of the phenotype: "gaussian" for continuous phenotype and "binomial" for binary phenotype.
+#' @param snpnet_prefix Prefix of the snpnet result files used to construct the full path. Only if `saved_path` is specified.
+#' @param snpnet_suffix Extension suffix of the snpnet result files used to construct the full path. Only if `saved_path` is specified.
+#' @param snpnet_subdir Name of the snpnet result subdirectory holding multiple result files for one phenotype. Only if `saved_path` is specified.
+#' @param configs Additional list of configs including path to either zstdcat or zcat.
+#'
+#' @return A list containing the prediction and the resopnse for which the prediction is made.
+#'
 #' @export
-predict_snpnet <- function(saved_path, new_genotype_file, new_phenotype_file, phenotype,
+predict_snpnet <- function(fit = NULL, saved_path = NULL, new_genotype_file, new_phenotype_file, phenotype,
                            gcount_path = NULL, meta_dir = NULL, meta_suffix = ".rda",
                            covariate_names = NULL, split_col = NULL, split_name = NULL, idx = NULL,
                            family = NULL,
                            snpnet_prefix = "output_iter_", snpnet_suffix = ".RData", snpnet_subdir = "results",
                            configs = list(zstdcat.path = "zstdcat", zcat.path='zcat')) {
 
-  phe_dir <- file.path(saved_path, snpnet_subdir)
-  files_in_dir <- list.files(phe_dir)
-  result_files <- files_in_dir[startsWith(files_in_dir, snpnet_prefix) & endsWith(files_in_dir, snpnet_suffix)]
-  max_iter <- max(as.numeric(gsub(snpnet_suffix, "", gsub(pattern = snpnet_prefix, "", result_files))))
+  if (is.null(fit) && is.null(saved_path)) {
+    stop("Either fit object or file path to the saved object should be provided.\n")
+  }
+  if (is.null(fit)) {
+    phe_dir <- file.path(saved_path, snpnet_subdir)
+    files_in_dir <- list.files(phe_dir)
+    result_files <- files_in_dir[startsWith(files_in_dir, snpnet_prefix) & endsWith(files_in_dir, snpnet_suffix)]
+    max_iter <- max(as.numeric(gsub(snpnet_suffix, "", gsub(pattern = snpnet_prefix, "", result_files))))
 
-  e <- new.env()
-  load(file.path(saved_path, snpnet_subdir, paste0(snpnet_prefix, max_iter, snpnet_suffix)), envir = e)
-  a0 <- e$a0
-  if (is.null(idx)) idx <- seq_along(a0)
-  beta <- e$beta
-  feature_names <- unique(unlist(sapply(beta, function(x) names(x[x != 0]))))
-  feature_names <- setdiff(feature_names, covariate_names)
+    e <- new.env()
+    load(file.path(saved_path, snpnet_subdir, paste0(snpnet_prefix, max_iter, snpnet_suffix)), envir = e)
+    a0 <- e$a0
+    beta <- e$beta
 
-  stats <- list()
-  if (!is.null(gcount_path)) {
-    gcount_df <-
-      data.table::fread(gcount_path) %>%
-      dplyr::rename(original_ID = ID) %>%
-      dplyr::mutate(
-        ID = paste0(original_ID, '_', ALT),
-        stats_pNAs  = MISSING_CT / (MISSING_CT + OBS_CT),
-        stats_means = (HAP_ALT_CTS + HET_REF_ALT_CTS + 2 * TWO_ALT_GENO_CTS ) / OBS_CT,
-        stats_msts  = (HAP_ALT_CTS + HET_REF_ALT_CTS + 4 * TWO_ALT_GENO_CTS ) / OBS_CT,
-        stats_SDs   = stats_msts - stats_means * stats_means
-      )
-    stats[["pnas"]]  <- gcount_df %>% dplyr::pull(stats_pNAs)
-    stats[["means"]] <- gcount_df %>% dplyr::pull(stats_means)
-    stats[["sds"]]   <- gcount_df %>% dplyr::pull(stats_SDs)
-    for(key in names(stats)){
-      names(stats[[key]]) <- gcount_df %>% dplyr::pull(ID)
+    stats <- list()
+    if (!is.null(gcount_path)) {
+      gcount_df <-
+        data.table::fread(gcount_path) %>%
+        dplyr::rename(original_ID = ID) %>%
+        dplyr::mutate(
+          ID = paste0(original_ID, '_', ALT),
+          stats_pNAs  = MISSING_CT / (MISSING_CT + OBS_CT),
+          stats_means = (HAP_ALT_CTS + HET_REF_ALT_CTS + 2 * TWO_ALT_GENO_CTS ) / OBS_CT,
+          stats_msts  = (HAP_ALT_CTS + HET_REF_ALT_CTS + 4 * TWO_ALT_GENO_CTS ) / OBS_CT,
+          stats_SDs   = stats_msts - stats_means * stats_means
+        )
+      stats[["pnas"]]  <- gcount_df %>% dplyr::pull(stats_pNAs)
+      stats[["means"]] <- gcount_df %>% dplyr::pull(stats_means)
+      stats[["sds"]]   <- gcount_df %>% dplyr::pull(stats_SDs)
+      for(key in names(stats)){
+        names(stats[[key]]) <- gcount_df %>% dplyr::pull(ID)
+      }
+    } else {
+      stats[["pnas"]] <- readRDS(file.path(meta_dir, paste0("pnas", meta_suffix)))
+      stats[["means"]] <- readRDS(file.path(meta_dir, paste0("means", meta_suffix)))
+      if (file.exists(file.path(meta_dir, paste0("sds", meta_suffix)))) {
+        stats[["sds"]] <- readRDS(file.path(meta_dir, paste0("sds", meta_suffix)))
+      }
     }
   } else {
-    stats[["pnas"]] <- readRDS(file.path(meta_dir, paste0("pnas", meta_suffix)))
-    stats[["means"]] <- readRDS(file.path(meta_dir, paste0("means", meta_suffix)))
-    if (file.exists(file.path(meta_dir, paste0("sds", meta_suffix)))) {
-      stats[["sds"]] <- readRDS(file.path(meta_dir, paste0("sds", meta_suffix)))
-    }
+    a0 <- fit$a0
+    beta <- fit$beta
+    stats <- fit$stats
   }
+
+  feature_names <- unique(unlist(sapply(beta, function(x) names(x[x != 0]))))
+  feature_names <- setdiff(feature_names, covariate_names)
+  if (is.null(idx)) idx <- seq_along(a0)
 
   ids <- list()
   ids[["psam"]] <- readIDsFromPsam(paste0(new_genotype_file, '.psam'))
