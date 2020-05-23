@@ -1,8 +1,18 @@
 #' Predict from the Fitted Object or File
 #'
-#' @param fit Fitted object returned from the snpnet function. If not specified, `saved_path` has to be provided.
-#' @param saved_path Path to the file that saves the fit object. The full path is constructed as ${saved_path}/${snpnet_subdir}/${snpnet_prefix}ITER${snpnet_suffix}, where ITER will be the maximum index found in the snpnet subdirectory. If not specified, `fit` has to be provided.
-#' @param new_genotype_file Path to the new suite of genotype files. new_genotype_file.{pgen, psam, pvar.zst}.
+#' @usage predict_snpnet(fit = NULL, saved_path = NULL, new_genotype_file, new_phenotype_file,
+#'   phenotype, gcount_path = NULL, meta_dir = NULL, meta_suffix = ".rda", covariate_names = NULL,
+#'   split_col = NULL, split_name = NULL, idx = NULL, family = NULL, snpnet_prefix = "output_iter_",
+#'   snpnet_suffix = ".RData", snpnet_subdir = "results", configs = list(zstdcat.path = "zstdcat",
+#'   zcat.path='zcat'))
+#'
+#' @param fit Fitted object returned from the snpnet function. If not specified, `saved_path` has to
+#'   be provided.
+#' @param saved_path Path to the file that saves the fit object. The full path is constructed as
+#'   ${saved_path}/${snpnet_subdir}/${snpnet_prefix}ITER${snpnet_suffix}, where ITER will be the
+#'   maximum index found in the snpnet subdirectory. If not specified, `fit` has to be provided.
+#' @param new_genotype_file Path to the new suite of genotype files. new_genotype_file.{pgen, psam,
+#'   pvar.zst}.
 #'   must exist.
 #' @param new_phenotype_file Path to the phenotype. The header must include FID, IID. Used for extracting covaraites and computing metrics.
 #' @param phenotype Name of the phenotype for which the fit was computed.
