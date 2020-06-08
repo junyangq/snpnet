@@ -12,7 +12,7 @@
 
 <meta name="author" content="Junyang Qian and Trevor Hastie" />
 
-<meta name="date" content="2020-05-22" />
+<meta name="date" content="2020-06-08" />
 
 <title>Snpnet Vignette</title>
 
@@ -95,7 +95,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 
 <h1 class="title toc-ignore">Snpnet Vignette</h1>
 <h4 class="author">Junyang Qian and Trevor Hastie</h4>
-<h4 class="date">2020-05-22</h4>
+<h4 class="date">2020-06-08</h4>
 
 
 
@@ -168,7 +168,7 @@ fit_snpnet &lt;-<span class="st"> </span><span class="kw">snpnet</span>(
 <span class="co">#&gt;  [99] 0.9970012 0.9972531</span></code></pre></div>
 <p>We can make prediction with the fitted object <code>fit_snpnet</code>. For example,</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">pred_snpnet &lt;-<span class="st"> </span><span class="kw">predict_snpnet</span>(
-  <span class="dt">fit =</span> fit_snpnet, 
+  <span class="dt">fit =</span> fit_snpnet,
   <span class="dt">new_genotype_file =</span> genotype.pfile,
   <span class="dt">new_phenotype_file =</span> phenotype.file,
   <span class="dt">phenotype =</span> phenotype,

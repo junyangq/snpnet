@@ -235,9 +235,15 @@ readPlinkKeepFile <- function(keep_file){
     keep_df %>% dplyr::pull(ID)
 }
 
+#' Read covariates and phenotype(s) from the provided file path
+#'
+#' Read covariates and phenotype(s) from the provided file path. Exclude individuals that contain
+#' any missing value in the covariates, miss all phenotype values or do not have corresponding
+#' genotypes.
+#'
 #' @export
 readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col, configs){
-    if(family == 'cox' || is.null(family)){
+    if(!is.null(family) && family == 'cox'){
         selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
     } else{
         selectCols <- c("FID", "IID", covariates, phenotype, split.col)
@@ -252,21 +258,34 @@ readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotyp
     # make sure the phe.master has the same individual ordering as in the genotype data
     # so that we don't have error when opening pgen file with sample subset option.
     phe.master <- phe.master.unsorted %>%
-    dplyr::left_join(
+      dplyr::left_join(
         data.frame(ID = psam.ids, stringsAsFactors=F) %>%
-        dplyr::mutate(sort_order = 1:n()),
+          dplyr::mutate(sort_order = 1:n()),
         by='ID'
-    ) %>%
-    dplyr::arrange(sort_order) %>% dplyr::select(-sort_order) %>%
-    data.table::as.data.table()
+      ) %>%
+      dplyr::arrange(sort_order) %>% dplyr::select(-sort_order) %>%
+      data.table::as.data.table()
     rownames(phe.master) <- phe.master$ID
 
-    # focus on individuals with non-missing values.
-    phe.no.missing.IDs <- phe.master$ID[
-        (phe.master[[phenotype]] != -9) & # missing phenotypes are encoded with -9
-        (!is.na(phe.master[[phenotype]])) &
-        (phe.master$ID %in% psam.ids) # check if we have genotype
-    ]
+    for (name in c(covariates, phenotype)) {
+      set(phe.master, i = which(phe.master[[name]] == -9), j = name, value = NA) # missing phenotypes are encoded with -9
+    }
+
+    # focus on individuals with complete covariates values
+    if (is.null(covariates)) {
+      phe.no.missing <- phe.master
+    } else {
+      phe.no.missing <- phe.master %>%
+        dplyr::filter_at(dplyr::vars(covariates), dplyr::all_vars(!is.na(.)))
+    }
+
+    # focus on individuals with at least one observed phenotype values
+    phe.no.missing <- phe.no.missing %>%
+      dplyr::filter_at(dplyr::vars(phenotype), dplyr::any_vars(!is.na(.))) %>%
+      dplyr::filter(ID %in% psam.ids) # check if we have genotype
+
+    phe.no.missing.IDs <- phe.no.missing$ID
+
     if(!is.null(split.col)){
         # focus on individuals in training and validation set
         phe.no.missing.IDs <- intersect(
