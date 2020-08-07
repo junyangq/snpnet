@@ -41,6 +41,10 @@ nvars (after QC filtering). If nobs > nvars, the default is 0.0001, close to zer
 If nobs < nvars, the default is 0.01. A very small value of lambda.min.ratio
 will lead to a saturated fit in the nobs < nvars case.}
 
+\item{lambda}{one can specify the full lambda list on which the lasso/elastic-net will be solved.
+Once provided, `lambda` and `lambda.min.ratio` will be ignored. It can be used for refitting
+after the optimal parameter is selected by validation.}
+
 \item{split.col}{the column name in the phenotype file that specifies the membership of individuals to
 the training or the validation set. The individuals marked as "train" and "val" will
 be treated as the training and validation set, respectively. When specified, the

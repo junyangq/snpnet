@@ -35,6 +35,9 @@
 #'                         nvars (after QC filtering). If nobs > nvars, the default is 0.0001, close to zero.
 #'                         If nobs < nvars, the default is 0.01. A very small value of lambda.min.ratio
 #'                         will lead to a saturated fit in the nobs < nvars case.
+#' @param lambda one can specify the full lambda list on which the lasso/elastic-net will be solved.
+#'               Once provided, `lambda` and `lambda.min.ratio` will be ignored. It can be used for refitting
+#'               after the optimal parameter is selected by validation.
 #' @param split.col the column name in the phenotype file that specifies the membership of individuals to
 #'                  the training or the validation set. The individuals marked as "train" and "val" will
 #'                  be treated as the training and validation set, respectively. When specified, the
@@ -94,7 +97,8 @@
 #' @export
 snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL,
                    alpha = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
-                   split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL) {
+                   lambda = NULL, split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL,
+                   configs = NULL) {
 
   validation <- (!is.null(split.col))
   time.start <- Sys.time()
@@ -107,6 +111,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
   ids[['psam']] <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))
 
   ### --- combine the specified configs with the default values --- ###
+  if (!is.null(lambda)) nlambda <- length(lambda)
   configs <- setupConfigs(configs, genotype.pfile, phenotype.file, phenotype, covariates, alpha, nlambda, split.col, p.factor, status.col, mem)
   if (configs[['prevIter']] >= configs[['niter']]) stop("prevIter is greater or equal to the total number of iterations.")
 
@@ -222,8 +227,14 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
 
     nobs <- nrow(phe[['train']])
     nvars <- length(vars)-length(stats[["excludeSNP"]])-length(covariates)
-    configs[['lambda.min.ratio']] <- lambda.min.ratio
-    full.lams <- computeLambdas(score, configs[['nlambda']], configs[['lambda.min.ratio']])
+
+    if (is.null(lambda)) {
+      configs[['lambda.min.ratio']] <- lambda.min.ratio
+      full.lams <- computeLambdas(score, configs[['nlambda']], configs[['lambda.min.ratio']])
+    } else {
+      configs['lambda.min.ratio'] <- list(NULL)
+      full.lams <- lambda
+    }
 
     lambda.idx <- 1
     num.lams <- configs[["nlams.init"]]
