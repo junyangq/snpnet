@@ -8,8 +8,8 @@
 #' bioRxiv (2019): https://doi.org/10.1101/630079
 #'
 #' @usage snpnet(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL, alpha
-#'   = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), split.col = NULL,
-#'   p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
+#'   = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
+#'   split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
 #'
 #' @param genotype.pfile the PLINK 2.0 pgen file that contains genotype.
 #'                       We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.
@@ -51,7 +51,7 @@
 #' harness for the computation. IMPORTANT if using a job scheduler.
 #' @param configs a list of other config parameters.
 #'                \describe{
-#'                 \item{missing.rate}{variants are excluded if the missing rate exceeds this level. Default is 0.05.}
+#'                 \item{missing.rate}{variants are excluded if the missing rate exceeds this level. Default is 0.1.}
 #'                 \item{MAF.thresh}{variants are excluded if the minor allele frequency (MAF) is lower
 #'                                than this level. Default is 0.001.}
 #'                 \item{nCores}{the number of cores used for computation. You may use the maximum number

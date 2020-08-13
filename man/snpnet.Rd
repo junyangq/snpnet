@@ -5,8 +5,8 @@
 \title{Fit the Lasso/Elastic-Net for Large Phenotype-Genotype Datasets}
 \usage{
 snpnet(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL, alpha
-  = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), split.col = NULL,
-  p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
+  = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL, 
+  split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
 }
 \arguments{
 \item{genotype.pfile}{the PLINK 2.0 pgen file that contains genotype.
