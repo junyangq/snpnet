@@ -12,7 +12,7 @@
 
 <meta name="author" content="Junyang Qian and Trevor Hastie" />
 
-<meta name="date" content="2020-06-08" />
+<meta name="date" content="2020-08-13" />
 
 <title>Snpnet Vignette</title>
 
@@ -95,7 +95,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 
 <h1 class="title toc-ignore">Snpnet Vignette</h1>
 <h4 class="author">Junyang Qian and Trevor Hastie</h4>
-<h4 class="date">2020-06-08</h4>
+<h4 class="date">2020-08-13</h4>
 
 
 
@@ -123,6 +123,13 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 <p>The other parameters can be specified in a config list object, such as <code>missing.rate</code>, <code>MAF.thresh</code>, <code>nCores</code>, <code>num.snps.batch</code> (batch size M of the BASIL algorithm), <code>save</code> (whether to save intermediate results), <code>results.dir</code>, <code>prevIter</code> (when starting from the middle), <code>use.glmnetPlus</code> and <code>glmnet.thresh</code> (convergence threshold). More details can be seen in the function documentation. In particular, If we want to recover results and continue the procedure from a previous job, we should have <code>save = TRUE</code> and specify <code>prevIter</code> with the index of the last successful (and saved) iteration.</p>
 <p>Snpnet depends on two other programs <strong>plink2</strong> and <strong>zstdcat</strong>. If they are not already on the system serach path, it is important to specify their locations in the <code>configs</code> object and pass it to <code>snpnet</code>.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">configs &lt;-<span class="st"> </span><span class="kw">list</span>(
+  <span class="co"># results.dir = &quot;PATH/TO/SAVE/DIR&quot;,  # needed when saving intermediate results</span>
+  <span class="co"># save = TRUE,  # save intermediate results per iteration (default FALSE)</span>
+  <span class="co"># nCores = 16,  # number of cores available (default 1)</span>
+  <span class="co"># niter = 100,  # max number of iterations (default 50)</span>
+  <span class="co"># prevIter = 15,  # if we want to start from some iteration saved in results.dir</span>
+  <span class="co"># use.glmnetPlus = TRUE,  # recommended for faster computation</span>
+  <span class="co"># early.stopping = FALSE,  # whether to stop based on validation performance (default TRUE)</span>
   <span class="dt">plink2.path =</span> <span class="st">&quot;plink2&quot;</span>,   <span class="co"># path to plink2 program</span>
   <span class="dt">zstdcat.path =</span> <span class="st">&quot;zstdcat&quot;</span>  <span class="co"># path to zstdcat program</span>
 )
@@ -147,6 +154,8 @@ fit_snpnet &lt;-<span class="st"> </span><span class="kw">snpnet</span>(
   <span class="dt">phenotype.file =</span> phenotype.file,
   <span class="dt">phenotype =</span> phenotype,
   <span class="dt">covariates =</span> covariates,
+  <span class="co"># split.col = &quot;split&quot;,  # split column name in phenotype.file with train/val/test labels</span>
+  <span class="co"># mem = 128000,  # amount of memory available (MB), recommended</span>
   <span class="dt">configs =</span> configs
 )  <span class="co"># we hide the intermediate messages</span></code></pre></div>
 <p>The intercept and coefficients can be extracted by <code>fit_snpnet$a0</code> and <code>fit_snpnet$beta</code>. It also saves the evaluation metric, which by default is <span class="math inline">\(R^2\)</span> for the Gaussian family.</p>

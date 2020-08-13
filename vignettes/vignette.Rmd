@@ -44,6 +44,13 @@ Snpnet depends on two other programs **plink2** and **zstdcat**. If they are not
 
 ```{r}
 configs <- list(
+  # results.dir = "PATH/TO/SAVE/DIR",  # needed when saving intermediate results
+  # save = TRUE,  # save intermediate results per iteration (default FALSE)
+  # nCores = 16,  # number of cores available (default 1)
+  # niter = 100,  # max number of iterations (default 50)
+  # prevIter = 15,  # if we want to start from some iteration saved in results.dir
+  # use.glmnetPlus = TRUE,  # recommended for faster computation
+  # early.stopping = FALSE,  # whether to stop based on validation performance (default TRUE)
   plink2.path = "plink2",   # path to plink2 program
   zstdcat.path = "zstdcat"  # path to zstdcat program
 )
@@ -74,6 +81,8 @@ fit_snpnet <- snpnet(
   phenotype.file = phenotype.file,
   phenotype = phenotype,
   covariates = covariates,
+  # split.col = "split",  # split column name in phenotype.file with train/val/test labels
+  # mem = 128000,  # amount of memory available (MB), recommended
   configs = configs
 )  # we hide the intermediate messages
 ```
