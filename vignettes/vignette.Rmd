@@ -113,7 +113,77 @@ str(pred_snpnet$prediction)
 str(pred_snpnet$metric)
 ```
 
-### Comparison with Glmnet
+
+### Lasso with Refitting
+
+Refitting is often recommended for the lasso/elastic-net to make the most of the validation set (more than serving for tuning parameter selection). One may take the following steps:
+
+- fit models on the training set under different parameters;
+- choose the optimal parameter based on the metric ($R^2$/AUC) on the validation set;
+- refit the model with the chosen parameter on a combined training and validation set.
+
+We show a code example of refitting below. To do that, we will need to use the `split` column in the phenotype file.
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+fit_snpnet_train <- snpnet(  
+  genotype.pfile = genotype.pfile,
+  phenotype.file = phenotype.file,
+  phenotype = phenotype,
+  covariates = covariates,
+  split.col = "split",
+  # mem = 128000,  # amount of memory available (MB), recommended
+  configs = configs
+)  # we hide the intermediate messages
+```
+
+Due to the default early stopping criterion, snpnet doesn't fit all the way to the end.
+
+```{r}
+max_idx <- sum(!is.na(fit_snpnet_train$metric.val))
+fit_snpnet_train$metric.val[1:max_idx]
+```
+
+To do the refitting, we have created a separate column `split_refit` in the phenotype file that merges the original `train` and `val` labels, and replaces the test labels with `val` so that snpnet will conveniently evaluate the test performance of the refit models.
+
+```{r}
+library(data.table)
+phe_tbl <- fread(phenotype.file)
+table(phe_tbl$split, phe_tbl$split_refit)
+```
+
+We extract the exact same lambda sequence from the fit above and refit using the `split_refit` column. Note that we want to turn off `early.stopping` in this case.
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+configs[["early.stopping"]] <- FALSE
+fit_snpnet_refit <- snpnet(  
+  genotype.pfile = genotype.pfile,
+  phenotype.file = phenotype.file,
+  phenotype = phenotype,
+  covariates = covariates,
+  split.col = "split_refit",
+  lambda = fit_snpnet_train$full.lams[1:max_idx],
+  configs = configs
+)  # we hide the intermediate messages
+```
+
+We may take a look at the refit training and test performance.
+
+```{r}
+fit_snpnet_refit$metric.train
+fit_snpnet_refit$metric.val  # this is in fact the performance evaluated on the test individuals
+```
+
+In the end, we should extract the test performance at the $\lambda$ value that achieves the best validation performance earlier. We may also output the corresponding model size.
+
+```{r}
+opt_idx <- which.max(fit_snpnet_train$metric.val)
+metric_optimal_test <- fit_snpnet_refit$metric.val[opt_idx]
+size_optimal <- sum(fit_snpnet_refit$beta[[opt_idx]] != 0)
+list(metric = metric_optimal_test, size = size_optimal)
+```
+
+
+### Numerical Comparison with Glmnet
 
 To compare with **glmnet**, we need to convert the genotype data into a normal R object.
 
@@ -157,7 +227,7 @@ checkDiff <- function(x, y) {
 We show the difference of the computed $\lambda$ sequence and the estimated coefficients. There is small discrepancy between the two solutions within the range of convergence threshold. The gap will shrink and eventually goes to 0 if we keep on tightening the threshold.
 
 ```{r}
-max(abs(fit_snpnet$full.lams - fit_glmnet$lambda))
+max(abs(fit_snpnet$full.lams - fit_glmnet$lambda*length(pfactor)/sum(pfactor)))  # adjustment due to some internal normalization by glmnet
 ```
 
 ```{r}

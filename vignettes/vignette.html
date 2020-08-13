@@ -192,19 +192,89 @@ fit_snpnet &lt;-<span class="st"> </span><span class="kw">snpnet</span>(
 <span class="co">#&gt;   ..- attr(*, &quot;dimnames&quot;)=List of 2</span>
 <span class="co">#&gt;   .. ..$ : chr [1:1600] &quot;per0_per0&quot; &quot;per1_per1&quot; &quot;per2_per2&quot; &quot;per3_per3&quot; ...</span>
 <span class="co">#&gt;   .. ..$ : chr [1:100] &quot;s0&quot; &quot;s1&quot; &quot;s2&quot; &quot;s3&quot; ...</span>
-<span class="co">#&gt;  $ val  : num [1:400, 1:100] -0.855 -0.0804 -0.838 0.0781 0.092 ...</span>
+<span class="co">#&gt;  $ val  : num [1:200, 1:100] -0.855 -0.0804 -0.838 -0.3573 0.7198 ...</span>
 <span class="co">#&gt;   ..- attr(*, &quot;dimnames&quot;)=List of 2</span>
-<span class="co">#&gt;   .. ..$ : chr [1:400] &quot;per4_per4&quot; &quot;per15_per15&quot; &quot;per20_per20&quot; &quot;per22_per22&quot; ...</span>
+<span class="co">#&gt;   .. ..$ : chr [1:200] &quot;per4_per4&quot; &quot;per15_per15&quot; &quot;per20_per20&quot; &quot;per27_per27&quot; ...</span>
 <span class="co">#&gt;   .. ..$ : chr [1:100] &quot;s0&quot; &quot;s1&quot; &quot;s2&quot; &quot;s3&quot; ...</span>
 <span class="kw">str</span>(pred_snpnet<span class="op">$</span>metric)
 <span class="co">#&gt; List of 2</span>
 <span class="co">#&gt;  $ train: Named num [1:100] 0.211 0.212 0.215 0.218 0.222 ...</span>
 <span class="co">#&gt;   ..- attr(*, &quot;names&quot;)= chr [1:100] &quot;s0&quot; &quot;s1&quot; &quot;s2&quot; &quot;s3&quot; ...</span>
-<span class="co">#&gt;  $ val  : Named num [1:100] 0.2 0.202 0.206 0.21 0.215 ...</span>
+<span class="co">#&gt;  $ val  : Named num [1:100] 0.186 0.187 0.19 0.193 0.197 ...</span>
 <span class="co">#&gt;   ..- attr(*, &quot;names&quot;)= chr [1:100] &quot;s0&quot; &quot;s1&quot; &quot;s2&quot; &quot;s3&quot; ...</span></code></pre></div>
 </div>
-<div id="comparison-with-glmnet" class="section level3">
-<h3>Comparison with Glmnet</h3>
+<div id="lasso-with-refitting" class="section level3">
+<h3>Lasso with Refitting</h3>
+<p>Refitting is often recommended for the lasso/elastic-net to make the most of the validation set (more than serving for tuning parameter selection). One may take the following steps:</p>
+<ul>
+<li>fit models on the training set under different parameters;</li>
+<li>choose the optimal parameter based on the metric (<span class="math inline">\(R^2\)</span>/AUC) on the validation set;</li>
+<li>refit the model with the chosen parameter on a combined training and validation set.</li>
+</ul>
+<p>We show a code example of refitting below. To do that, we will need to use the <code>split</code> column in the phenotype file.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">fit_snpnet_train &lt;-<span class="st"> </span><span class="kw">snpnet</span>(  
+  <span class="dt">genotype.pfile =</span> genotype.pfile,
+  <span class="dt">phenotype.file =</span> phenotype.file,
+  <span class="dt">phenotype =</span> phenotype,
+  <span class="dt">covariates =</span> covariates,
+  <span class="dt">split.col =</span> <span class="st">&quot;split&quot;</span>,
+  <span class="co"># mem = 128000,  # amount of memory available (MB), recommended</span>
+  <span class="dt">configs =</span> configs
+)  <span class="co"># we hide the intermediate messages</span></code></pre></div>
+<p>Due to the default early stopping criterion, snpnet doesn’t fit all the way to the end.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">max_idx &lt;-<span class="st"> </span><span class="kw">sum</span>(<span class="op">!</span><span class="kw">is.na</span>(fit_snpnet_train<span class="op">$</span>metric.val))
+fit_snpnet_train<span class="op">$</span>metric.val[<span class="dv">1</span><span class="op">:</span>max_idx]
+<span class="co">#&gt;  [1] 0.1871064 0.1876379 0.1881991 0.1900906 0.1936576 0.1977614 0.2020771</span>
+<span class="co">#&gt;  [8] 0.2064773 0.2125167 0.2203595 0.2272916 0.2333822 0.2393646 0.2451911</span>
+<span class="co">#&gt; [15] 0.2500949 0.2544346 0.2579107 0.2610755 0.2623503 0.2639159 0.2654058</span>
+<span class="co">#&gt; [22] 0.2660344 0.2666799 0.2670676 0.2676056 0.2680150 0.2691833 0.2705949</span>
+<span class="co">#&gt; [29] 0.2706501 0.2706059 0.2702432 0.2685013 0.2660019 0.2637800 0.2609096</span></code></pre></div>
+<p>To do the refitting, we have created a separate column <code>split_refit</code> in the phenotype file that merges the original <code>train</code> and <code>val</code> labels, and replaces the test labels with <code>val</code> so that snpnet will conveniently evaluate the test performance of the refit models.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(data.table)
+phe_tbl &lt;-<span class="st"> </span><span class="kw">fread</span>(phenotype.file)
+<span class="kw">table</span>(phe_tbl<span class="op">$</span>split, phe_tbl<span class="op">$</span>split_refit)
+<span class="co">#&gt;        </span>
+<span class="co">#&gt;         train  val</span>
+<span class="co">#&gt;   test      0  200</span>
+<span class="co">#&gt;   train  1600    0</span>
+<span class="co">#&gt;   val     200    0</span></code></pre></div>
+<p>We extract the exact same lambda sequence from the fit above and refit using the <code>split_refit</code> column. Note that we want to turn off <code>early.stopping</code> in this case.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">configs[[<span class="st">&quot;early.stopping&quot;</span>]] &lt;-<span class="st"> </span><span class="ot">FALSE</span>
+fit_snpnet_refit &lt;-<span class="st"> </span><span class="kw">snpnet</span>(  
+  <span class="dt">genotype.pfile =</span> genotype.pfile,
+  <span class="dt">phenotype.file =</span> phenotype.file,
+  <span class="dt">phenotype =</span> phenotype,
+  <span class="dt">covariates =</span> covariates,
+  <span class="dt">split.col =</span> <span class="st">&quot;split_refit&quot;</span>,
+  <span class="dt">lambda =</span> fit_snpnet_train<span class="op">$</span>full.lams[<span class="dv">1</span><span class="op">:</span>max_idx],
+  <span class="dt">configs =</span> configs
+)  <span class="co"># we hide the intermediate messages</span></code></pre></div>
+<p>We may take a look at the refit training and test performance.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">fit_snpnet_refit<span class="op">$</span>metric.train
+<span class="co">#&gt;  [1] 0.2092566 0.2092566 0.2102606 0.2125659 0.2160379 0.2199773 0.2260090</span>
+<span class="co">#&gt;  [8] 0.2327893 0.2396929 0.2475833 0.2564766 0.2650072 0.2739793 0.2845658</span>
+<span class="co">#&gt; [15] 0.2957047 0.3072280 0.3195407 0.3322154 0.3455897 0.3594264 0.3749953</span>
+<span class="co">#&gt; [22] 0.3917710 0.4097319 0.4287484 0.4482760 0.4681127 0.4883932 0.5089945</span>
+<span class="co">#&gt; [29] 0.5291372 0.5492970 0.5689396 0.5883670 0.6076702 0.6269533 0.6460628</span>
+fit_snpnet_refit<span class="op">$</span>metric.val  <span class="co"># this is in fact the performance evaluated on the test individuals</span>
+<span class="co">#&gt;  [1] 0.1956831 0.1956831 0.1966735 0.1994116 0.2044847 0.2097991 0.2164871</span>
+<span class="co">#&gt;  [8] 0.2241968 0.2314194 0.2390105 0.2473809 0.2551320 0.2625772 0.2700116</span>
+<span class="co">#&gt; [15] 0.2763305 0.2816834 0.2878536 0.2943366 0.3000984 0.3056831 0.3118075</span>
+<span class="co">#&gt; [22] 0.3177306 0.3232243 0.3278932 0.3323033 0.3346956 0.3367966 0.3385153</span>
+<span class="co">#&gt; [29] 0.3395552 0.3396960 0.3384233 0.3365555 0.3340420 0.3314546 0.3284774</span></code></pre></div>
+<p>In the end, we should extract the test performance at the <span class="math inline">\(\lambda\)</span> value that achieves the best validation performance earlier. We may also output the corresponding model size.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">opt_idx &lt;-<span class="st"> </span><span class="kw">which.max</span>(fit_snpnet_train<span class="op">$</span>metric.val)
+metric_optimal_test &lt;-<span class="st"> </span>fit_snpnet_refit<span class="op">$</span>metric.val[opt_idx]
+size_optimal &lt;-<span class="st"> </span><span class="kw">sum</span>(fit_snpnet_refit<span class="op">$</span>beta[[opt_idx]] <span class="op">!=</span><span class="st"> </span><span class="dv">0</span>)
+<span class="kw">list</span>(<span class="dt">metric =</span> metric_optimal_test, <span class="dt">size =</span> size_optimal)
+<span class="co">#&gt; $metric</span>
+<span class="co">#&gt; [1] 0.3395552</span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; $size</span>
+<span class="co">#&gt; [1] 314</span></code></pre></div>
+</div>
+<div id="numerical-comparison-with-glmnet" class="section level3">
+<h3>Numerical Comparison with Glmnet</h3>
 <p>To compare with <strong>glmnet</strong>, we need to convert the genotype data into a normal R object.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ids &lt;-<span class="st"> </span><span class="kw">readIDsFromPsam</span>(<span class="kw">paste0</span>(genotype.pfile, <span class="st">'.psam'</span>))
 phe &lt;-<span class="st"> </span><span class="kw">readPheMaster</span>(phenotype.file, ids, <span class="st">&quot;gaussian&quot;</span>, covariates, phenotype, <span class="ot">NULL</span>, <span class="ot">NULL</span>, configs)
@@ -235,8 +305,8 @@ checkDiff &lt;-<span class="st"> </span><span class="cf">function</span>(x, y) {
   <span class="kw">list</span>(<span class="dt">max =</span> <span class="kw">max</span>(<span class="kw">abs</span>(xf<span class="op">-</span>yf)), <span class="dt">mean =</span> <span class="kw">mean</span>(<span class="kw">abs</span>(xf<span class="op">-</span>yf)))
 }</code></pre></div>
 <p>We show the difference of the computed <span class="math inline">\(\lambda\)</span> sequence and the estimated coefficients. There is small discrepancy between the two solutions within the range of convergence threshold. The gap will shrink and eventually goes to 0 if we keep on tightening the threshold.</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">max</span>(<span class="kw">abs</span>(fit_snpnet<span class="op">$</span>full.lams <span class="op">-</span><span class="st"> </span>fit_glmnet<span class="op">$</span>lambda))
-<span class="co">#&gt; [1] 0.0001816286</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">max</span>(<span class="kw">abs</span>(fit_snpnet<span class="op">$</span>full.lams <span class="op">-</span><span class="st"> </span>fit_glmnet<span class="op">$</span>lambda<span class="op">*</span><span class="kw">length</span>(pfactor)<span class="op">/</span><span class="kw">sum</span>(pfactor)))  <span class="co"># adjustment due to some internal normalization by glmnet</span>
+<span class="co">#&gt; [1] 4.750225e-11</span></code></pre></div>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">checkDiff</span>(fit_snpnet<span class="op">$</span>beta[[<span class="dv">6</span>]], fit_glmnet<span class="op">$</span>beta[, <span class="dv">6</span>])
 <span class="co">#&gt; $max</span>
 <span class="co">#&gt; [1] 4.280143e-07</span>
@@ -276,11 +346,11 @@ fit_snpnet_ent &lt;-<span class="st"> </span><span class="kw">snpnet</span>(
 <span class="co">#&gt;  [92]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [99]        NA        NA</span>
 fit_snpnet_ent<span class="op">$</span>metric.val
-<span class="co">#&gt;   [1] 0.1945321 0.1949240 0.1953680 0.1972871 0.2012808 0.2060132 0.2110831</span>
-<span class="co">#&gt;   [8] 0.2164552 0.2225488 0.2301934 0.2379852 0.2451726 0.2521224 0.2587086</span>
-<span class="co">#&gt;  [15] 0.2646035 0.2700385 0.2747830 0.2788710 0.2825376 0.2862595 0.2894939</span>
-<span class="co">#&gt;  [22] 0.2917946 0.2930747 0.2950071 0.2964086 0.2967521 0.2968687 0.2963385</span>
-<span class="co">#&gt;  [29] 0.2951664 0.2941304        NA        NA        NA        NA        NA</span>
+<span class="co">#&gt;   [1] 0.1871064 0.1875658 0.1880553 0.1896925 0.1928345 0.1965032 0.2004100</span>
+<span class="co">#&gt;   [8] 0.2044619 0.2100379 0.2173241 0.2238545 0.2296996 0.2355830 0.2413149</span>
+<span class="co">#&gt;  [15] 0.2461747 0.2506889 0.2544121 0.2577139 0.2592561 0.2610149 0.2629657</span>
+<span class="co">#&gt;  [22] 0.2639808 0.2645202 0.2654656 0.2666435 0.2674386 0.2693372 0.2707239</span>
+<span class="co">#&gt;  [29] 0.2705973 0.2705524        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [36]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [43]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [50]        NA        NA        NA        NA        NA        NA        NA</span>
@@ -305,8 +375,8 @@ fit_snpnet_ent<span class="op">$</span>metric.val
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">fit_snpnet_bin<span class="op">$</span>metric.train
 <span class="co">#&gt;   [1] 0.6790872 0.6802187 0.6812283 0.6822316 0.6830131 0.6840945 0.6847806</span>
 <span class="co">#&gt;   [8] 0.6856089 0.6865779 0.6883658 0.6917791 0.6959206 0.7002607 0.7068997</span>
-<span class="co">#&gt;  [15] 0.7145858 0.7240395 0.7354499 0.7491092 0.7632139 0.7789503 0.7960307</span>
-<span class="co">#&gt;  [22] 0.8131455 0.8300602 0.8470046 0.8637178        NA        NA        NA</span>
+<span class="co">#&gt;  [15] 0.7145858 0.7240395 0.7354499 0.7491092 0.7632139 0.7789503        NA</span>
+<span class="co">#&gt;  [22]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [29]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [36]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [43]        NA        NA        NA        NA        NA        NA        NA</span>
@@ -319,10 +389,10 @@ fit_snpnet_ent<span class="op">$</span>metric.val
 <span class="co">#&gt;  [92]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [99]        NA        NA</span>
 fit_snpnet_bin<span class="op">$</span>metric.val
-<span class="co">#&gt;   [1] 0.6557377 0.6566946 0.6575508 0.6582811 0.6589610 0.6598424 0.6600690</span>
-<span class="co">#&gt;   [8] 0.6607489 0.6609755 0.6612777 0.6623354 0.6627131 0.6642240 0.6663141</span>
-<span class="co">#&gt;  [15] 0.6681776 0.6691345 0.6695374 0.6712246 0.6716527 0.6713505 0.6719297</span>
-<span class="co">#&gt;  [22] 0.6700914 0.6672459 0.6653068 0.6619325        NA        NA        NA</span>
+<span class="co">#&gt;   [1] 0.6584274 0.6590377 0.6596481 0.6606652 0.6605635 0.6611738 0.6614790</span>
+<span class="co">#&gt;   [8] 0.6623945 0.6626996 0.6624962 0.6626996 0.6633099 0.6648357 0.6662598</span>
+<span class="co">#&gt;  [15] 0.6674804 0.6668701 0.6658529 0.6662598 0.6652426 0.6623945        NA</span>
+<span class="co">#&gt;  [22]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [29]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [36]        NA        NA        NA        NA        NA        NA        NA</span>
 <span class="co">#&gt;  [43]        NA        NA        NA        NA        NA        NA        NA</span>
