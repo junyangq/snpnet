@@ -2,9 +2,9 @@
 
 License: GPL-2
 
-### Reference: 
-  - Qian, Junyang, Wenfei Du, Yosuke Tanigawa, Matthew Aguirre, Robert Tibshirani, Manuel A. Rivas, and Trevor Hastie. "A Fast and Flexible Algorithm for Solving the Lasso in Large-scale and Ultrahigh-dimensional Problems." bioRxiv (2020): https://www.biorxiv.org/content/10.1101/630079v3
-  - Ruilin Li, Christopher Chang, Johanne Marie Justesen, Yosuke Tanigawa, Junyang Qian, Trevor Hastie, Manuel A. Rivas, Robert Tibshirani. "Fast Lasso method for Large-scale and Ultrahigh-dimensional Cox Model with applications to UK Biobank." bioRxiv (2020): https://www.biorxiv.org/content/10.1101/2020.01.20.913194v1.full.pdf
+### References: 
+  - Junyang Qian, Yosuke Tanigawa, Wenfei Du, Matthew Aguirre, Robert Tibshirani, Manuel A. Rivas, and Trevor Hastie. A fast and scalable framework for large-scale and ultrahigh-dimensional sparse regression with application to the UK Biobank. PLOS Genetics 16(10): e1009141. https://doi.org/10.1371/journal.pgen.1009141
+  - Ruilin Li, Christopher Chang, Johanne M Justesen, Yosuke Tanigawa, Junyang Qiang, Trevor Hastie, Manuel A Rivas, Robert Tibshirani, Fast Lasso method for large-scale and ultrahigh-dimensional Cox model with applications to UK Biobank, Biostatistics, , kxaa038, https://doi.org/10.1093/biostatistics/kxaa038
 
 ### Installation:
 Most of the requirements of snpnet are available from CRAN. It also depends on the `pgenlibr`, `glmnet/glmnetPlus` and `cindex` (for survival analysis) packages. One can install them by running the following commands in R. Notice that the installation of `pgenlibr` requires [zstd(>=1.4.4)](https://github.com/facebook/zstd). It can be built from source or simply available from [conda](https://anaconda.org/conda-forge/zstd), [pip](https://pypi.org/project/zstd/) or [brew](https://formulae.brew.sh/formula/zstd).
