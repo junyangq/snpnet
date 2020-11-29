@@ -100,6 +100,8 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
                    lambda = NULL, split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL,
                    configs = NULL) {
 
+  ID <- ALT <- NULL
+
   validation <- (!is.null(split.col))
   time.start <- Sys.time()
   snpnetLogger('Start snpnet', log.time = time.start)

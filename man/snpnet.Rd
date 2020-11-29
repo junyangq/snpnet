@@ -5,7 +5,7 @@
 \title{Fit the Lasso/Elastic-Net for Large Phenotype-Genotype Datasets}
 \usage{
 snpnet(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL, alpha
-  = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL, 
+  = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
   split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
 }
 \arguments{
@@ -62,7 +62,7 @@ harness for the computation. IMPORTANT if using a job scheduler.}
 
 \item{configs}{a list of other config parameters.
 \describe{
- \item{missing.rate}{variants are excluded if the missing rate exceeds this level. Default is 0.05.}
+ \item{missing.rate}{variants are excluded if the missing rate exceeds this level. Default is 0.1.}
  \item{MAF.thresh}{variants are excluded if the minor allele frequency (MAF) is lower
                 than this level. Default is 0.001.}
  \item{nCores}{the number of cores used for computation. You may use the maximum number

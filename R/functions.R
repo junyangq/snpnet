@@ -39,6 +39,10 @@ predict_snpnet <- function(fit = NULL, saved_path = NULL, new_genotype_file, new
                            snpnet_prefix = "output_iter_", snpnet_suffix = ".RData", snpnet_subdir = "results",
                            configs = list(zstdcat.path = "zstdcat", zcat.path='zcat')) {
 
+  ID <- original_ID <- NULL  # to deal with "no visible binding for global variable"
+  ALT <- MISSING_CT <- OBS_CT <- HAP_ALT_CTS <- HET_REF_ALT_CTS <- TWO_ALT_GENO_CTS <- NULL
+  stats_msts <- stats_means <- stats_pNAs <- stats_SDs <- NULL
+
   if (is.null(fit) && is.null(saved_path)) {
     stop("Either fit object or file path to the saved object should be provided.\n")
   }
@@ -211,8 +215,8 @@ inferFamily <- function(phe, phenotype, status){
     family
 }
 
-#' @export
 readIDsFromPsam <- function(psam){
+    FID <- IID <- NULL  # to deal with "no visible binding for global variable"
     df <- data.table::fread(psam) %>%
     dplyr::rename('FID' = '#FID') %>%
     dplyr::mutate(ID = paste(FID, IID, sep='_'))
@@ -230,6 +234,7 @@ cat_or_zcat <- function(filename, configs=list(zstdcat.path='zstdcat', zcat.path
 }
 
 readPlinkKeepFile <- function(keep_file){
+    ID <- NULL  # to deal with "no visible binding for global variable"
     keep_df <- data.table::fread(keep_file, colClasses='character', stringsAsFactors=F)
     keep_df$ID <- paste(keep_df$V1, keep_df$V2, sep = "_")
     keep_df %>% dplyr::pull(ID)
@@ -241,9 +246,34 @@ readPlinkKeepFile <- function(keep_file){
 #' any missing value in the covariates, miss all phenotype values or do not have corresponding
 #' genotypes.
 #'
+#' @param phenotype.file the path of the file that contains the phenotype values and can be read as
+#'                       as a table. There should be FID (family ID) and IID (individual ID) columns
+#'                       containing the identifier for each individual, and the phenotype column(s).
+#'                       (optional) some covariate columns and a column specifying the
+#'                       training/validation split can be included in this file.
+#' @param psam.ids a vector of ids read from the psam file.
+#' @param family the type of the phenotype: "gaussian", "binomial", or "cox".
+#' @param covariates a character vector containing the names of the covariates included in the lasso
+#'                   fitting, whose coefficients will not be penalized. The names must exist in the
+#'                   column names of the phenotype file.
+#' @param phenotype the name of the phenotype. Must be the same as the corresponding column name in
+#'                  the phenotype file.
+#' @param status the column name for the status column for Cox proportional hazards model.
+#'               When running the Cox model, the specified column must exist in the phenotype file.
+#' @param split.col the column name in the phenotype file that specifies the membership of individuals to
+#'                  the training or the validation set. The individuals marked as "train" and "val" will
+#'                  be treated as the training and validation set, respectively. When specified, the
+#'                  model performance is evaluated on both the training and the validation sets.
+#' @param configs a list of other config parameters. See more description in the `snpnet` function.
+#'
+#' @return a data.table including the requested columns.
+#'
 #' @export
 readPheMaster <- function(phenotype.file, psam.ids, family, covariates, phenotype, status, split.col, configs){
-    if(!is.null(family) && family == 'cox'){
+
+  sort_order <- . <- ID <- NULL  # to deal with "no visible binding for global variable"
+
+  if(!is.null(family) && family == 'cox'){
         selectCols <- c("FID", "IID", covariates, phenotype, status, split.col)
     } else{
         selectCols <- c("FID", "IID", covariates, phenotype, split.col)
@@ -316,6 +346,10 @@ checkMissingPhenoWarning <- function(phe.master, phe.no.missing.IDs){
 }
 
 computeStats <- function(pfile, ids, configs) {
+  ID <- original_ID <- NULL  # to deal with "no visible binding for global variable"
+  ALT <- MISSING_CT <- OBS_CT <- HAP_ALT_CTS <- HET_REF_ALT_CTS <- TWO_ALT_GENO_CTS <- NULL
+  stats_msts <- stats_means <- stats_pNAs <- stats_SDs <- NULL
+
   keep_f       <- paste0(configs[['gcount.full.prefix']], '.keep')
   gcount_tsv_f <- paste0(configs[['gcount.full.prefix']], '.gcount.tsv')
 
@@ -393,6 +427,7 @@ readBinMat <- function(fhead, configs){
 }
 
 computeProduct <- function(residual, pfile, vars, stats, configs, iter) {
+  ID <- NULL  # to deal with "no visible binding for global variable"
   time.computeProduct.start <- Sys.time()
   snpnetLogger('Start computeProduct()', indent=2, log.time=time.computeProduct.start)
 

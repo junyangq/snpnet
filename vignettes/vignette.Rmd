@@ -188,7 +188,11 @@ list(metric = metric_optimal_test, size = size_optimal)
 To compare with **glmnet**, we need to convert the genotype data into a normal R object.
 
 ```{r}
-ids <- readIDsFromPsam(paste0(genotype.pfile, '.psam'))
+mypfile <- dplyr::mutate(
+  dplyr::rename(data.table::fread(paste0(genotype.pfile, '.psam')), 'FID' = '#FID'),
+  ID = paste(FID, IID, sep='_')
+  )
+ids <- mypfile$ID
 phe <- readPheMaster(phenotype.file, ids, "gaussian", covariates, phenotype, NULL, NULL, configs)
 vars <- readRDS(system.file("extdata", "vars.rds", package = "snpnet"))
 pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
