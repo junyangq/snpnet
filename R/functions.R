@@ -398,6 +398,7 @@ computeStats <- function(pfile, ids, configs) {
   }
   out[["excludeSNP"]] <- names(out[["means"]])[(out[["pnas"]] > configs[["missing.rate"]]) | (out[["means"]] < 2 * configs[["MAF.thresh"]])]
   out[["excludeSNP"]] <- out[["excludeSNP"]][ ! is.na(out[["excludeSNP"]]) ]
+  out[["excludeSNP"]] <- base::unique(c(configs[["excludeSNP"]], out[["excludeSNP"]]))
 
   if (configs[['save']]){
       gcount_df %>% data.table::fwrite(gcount_tsv_f, sep='\t')
@@ -700,7 +701,8 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, cov
         plink2.path='plink2',
         zstdcat.path='zstdcat',
         zcat.path='zcat',
-        rank = TRUE
+        rank = TRUE,
+        excludeSNP = NULL
     )
     out <- defaults
 

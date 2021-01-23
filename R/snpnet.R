@@ -69,6 +69,8 @@
 #'                 \item{save.dir}{the relative path to the subdirectory used to store the intermediate
 #'                              results so that we may look into or recover from later.
 #'                              Needed when `save = TRUE`. Default is `"results/`.}
+#'                 \item{excludeSNP}{character vector containing genotype names to exclude from
+#'                                  the analysis}
 #'                 \item{nlams.init}{the number of lambdas considered in the first iteration.
 #'                              Default 10 is a reasonable number to start with.}
 #'                 \item{nlams.delta}{the length of extended lambdas down the sequence when there are few
@@ -183,6 +185,7 @@ snpnet <- function(genotype.pfile, phenotype.file, phenotype, family = NULL, cov
 
   ### --- Read genotypes --- ###
   vars <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0(configs[['zstdcat.path']], ' ', paste0(genotype.pfile, '.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
+  configs[["excludeSNP"]] <- base::intersect(configs[["excludeSNP"]], vars)
   pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
   pgen <- list()
   for(s in splits) pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['psam']]))
