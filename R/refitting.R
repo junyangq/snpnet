@@ -47,9 +47,9 @@ snpnet_refit <- function(genotype.pfile, phenotype.file, phenotype, lambda, beta
                          train_val_labels = c("train", "val"), test_labels = c("test"),
                          p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL) {
   
-  cat("before pruning:", length(beta.init))
+  cat("before pruning:", length(beta.init), "\n")
   beta.init <- beta.init[beta.init != 0]
-  cat("end pruning:", length(beta.init))
+  cat("end pruning:", length(beta.init), "\n")
   
   ID <- ALT <- NULL
   
