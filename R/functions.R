@@ -605,27 +605,31 @@ computeMetric <- function(pred, response, metric.type) {
 }
 
 checkEarlyStopping <- function(metric.val, max.valid.idx, iter, configs){
-    max.valid.idx.lag <- max.valid.idx-configs[['stopping.lag']]
-    max.val.1 <- max(metric.val[1:(max.valid.idx.lag)])
-    max.val.2 <- max(metric.val[(max.valid.idx.lag+1):max.valid.idx])
-    snpnetLogger(sprintf('stopping lag=%g, max.val.1=%g max.val.2=%g', max.valid.idx.lag, max.val.1, max.val.2))
-    if (
-        (configs[['early.stopping']]) &&
-        (max.valid.idx > configs[['stopping.lag']]) &&
-        (max.val.1 > max.val.2)
-    ) {
-        snpnetLogger(sprintf(
-            "Early stopped at iteration %d (Lambda idx=%d ) with validation metric: %.14f.",
-            iter, which.max(metric.val), max(metric.val, na.rm = T)
-        ))
-        snpnetLogger(paste0(
-            "Previous ones: ",
-            paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "),
-            "."
-        ), indent=1)
-        earlyStop <- TRUE
+    if (max.valid.idx <= configs[['stopping.lag']]) {
+      earlyStop <- FALSE
     } else {
-        earlyStop <- FALSE
+      max.valid.idx.lag <- max.valid.idx-configs[['stopping.lag']]
+      max.val.1 <- max(metric.val[1:(max.valid.idx.lag)])
+      max.val.2 <- max(metric.val[(max.valid.idx.lag+1):max.valid.idx])
+      snpnetLogger(sprintf('stopping lag=%g, max.val.1=%g max.val.2=%g', max.valid.idx.lag, max.val.1, max.val.2))
+      if (
+          (configs[['early.stopping']]) &&
+          (max.valid.idx > configs[['stopping.lag']]) &&
+          (max.val.1 > max.val.2)
+      ) {
+          snpnetLogger(sprintf(
+              "Early stopped at iteration %d (Lambda idx=%d ) with validation metric: %.14f.",
+              iter, which.max(metric.val), max(metric.val, na.rm = T)
+          ))
+          snpnetLogger(paste0(
+              "Previous ones: ",
+              paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "),
+              "."
+          ), indent=1)
+          earlyStop <- TRUE
+      } else {
+          earlyStop <- FALSE
+      }
     }
     earlyStop
 }
