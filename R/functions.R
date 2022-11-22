@@ -217,7 +217,16 @@ inferFamily <- function(phe, phenotype, status){
 
 readIDsFromPsam <- function(psam){
     FID <- IID <- NULL  # to deal with "no visible binding for global variable"
-    df <- data.table::fread(psam) %>%
+    df <- data.table::fread(psam)
+    if (!('#FID' %in% colnames(df))) {
+      if ('IID' %in% colnames(df)) {
+        warning("#FID column not found in the psam file. Assume and use FID = IID.")
+        df['#FID'] <- df['IID']
+      } else {
+        stop('IID column not found in the psam file.')
+      }
+    }
+    df <- df %>%
     dplyr::rename('FID' = '#FID') %>%
     dplyr::mutate(ID = paste(FID, IID, sep='_'))
     df$ID
